@@ -262,6 +262,34 @@ detects on ProductCode and version, so upgrades work, and uninstall is a real
 uninstall. `samples/hpia-with-scheduled-task.json` also registers the weekly
 analyse-and-install task using HP's documented command line.
 
+## A project is a bundle
+
+A bare `.json` is only half a package. It names payload files sitting somewhere
+on the machine that wrote it, so it breaks the moment it is moved, shared, or
+checked out elsewhere - and it broke exactly that way here: a folder payload
+opened in the GUI looked empty, because relative paths were being resolved
+against the process working directory rather than the project file's folder.
+
+A `.msimaker` bundle is a zip carrying the project and every payload file:
+
+```
+project.json        the definition, payload paths rewritten bundle-relative
+payload/...         every file, in the structure it installs with
+```
+
+Folder payloads are expanded when packing, so what is captured is exactly the
+set of files the build installs, not a folder reference that may mean something
+different in six months. That makes a package a single artefact to version, hand
+over, or archive beside the MSI it produced.
+
+HPIA packs from 136 files and 27 MB to a 10.5 MB bundle, and building that
+bundle from an unrelated working directory produces the same ProductCode. The
+package code still differs between those builds, because it identifies the
+build rather than the product.
+
+Unpacking refuses any entry whose path escapes the extraction folder, since a
+zip may name one and unpacking blindly writes wherever the archive says.
+
 ## Recipe library
 
 A built-in set of package definitions for applications that are awkward to
@@ -280,7 +308,8 @@ seven carry the switches from vendor documentation and say so in their notes. A
 confidently wrong silent switch breaks a fleet quietly, which is worse than a
 note telling the admin to check.
 
-Users extend the library by dropping JSON into `%APPDATA%\msimakerecipes`, or
+Users extend the library by dropping JSON into `%APPDATA%\msimaker
+ecipes`, or
 by pointing `MSIMAKER_RECIPES` at a shared team folder. A user file reusing a
 built-in id replaces it, so a wrong switch can be corrected the same day.
 
@@ -304,5 +333,6 @@ built-in id replaces it, so a wrong switch can be corrected the same day.
 | `.intunewin` packaging | Working; HMAC verified |
 | Recipe library | 9 recipes, 2 verified |
 | Avalonia GUI | Builds and runs on Windows; cross-compiles for macOS |
-| Regression tests | 93 passing |
+| Project bundles | Verified portable; same ProductCode from any directory |
+| Regression tests | 99 passing |
 | macOS verification | Cross-compiles; not yet run on a Mac |

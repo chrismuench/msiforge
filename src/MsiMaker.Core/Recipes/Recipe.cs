@@ -13,6 +13,16 @@ namespace MsiMaker.Core.Recipes;
 /// makes the obvious packaging of this application fail quietly across a fleet,
 /// months after it was deployed and long after anyone is still watching.
 /// </summary>
+/// <summary>What a recipe expects to be handed as its payload.</summary>
+public enum RecipePayloadKind
+{
+    /// <summary>A single installer, typically a vendor EXE.</summary>
+    File,
+
+    /// <summary>A directory, such as an extracted SoftPaq.</summary>
+    Folder,
+}
+
 public sealed class Recipe
 {
     /// <summary>Lower-case and hyphenated; this is what the CLI takes as an argument.</summary>
@@ -66,6 +76,22 @@ public sealed class Recipe
 
     /// <summary>Stands in for the payload the admin supplies.</summary>
     public const string PayloadToken = "{payload}";
+
+    /// <summary>
+    /// Whether this recipe expects a single installer file or a whole directory.
+    /// A SoftPaq has to be extracted before packaging, so HPIA wants a folder
+    /// while a vendor EXE wants one file - and a caller asking for the wrong one
+    /// sends the admin looking for something that does not exist.
+    /// </summary>
+    [JsonIgnore]
+    public RecipePayloadKind PayloadKind =>
+        Project.Folders.Count > 0 ? RecipePayloadKind.Folder : RecipePayloadKind.File;
+
+    /// <summary>One line telling the admin what to supply.</summary>
+    [JsonIgnore]
+    public string PayloadPrompt => PayloadKind == RecipePayloadKind.Folder
+        ? "Choose the folder to package"
+        : "Choose the installer file";
 
     /// <summary>Marks a recipe that came from the user folder rather than the built-in library.</summary>
     [JsonIgnore]
