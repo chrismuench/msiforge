@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  # The whole premise of this project is that an MSI can be produced without
+  # Windows, so the build and the engine tests run on all three platforms and a
+  # failure on macOS is a real failure, not an accepted gap.
+  build:
+    name: Build and test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore MsiMaker.slnx
+
+      - name: Build
+        run: dotnet build MsiMaker.slnx -c Release --no-restore
+
+      - name: Test
+        run: dotnet test tests/MsiMaker.Tests/MsiMaker.Tests.csproj -c Release --no-build --verbosity normal
+
+      - name: What can this machine do?
+        run: dotnet run --project src/MsiMaker.Cli -c Release --no-build -- doctor
+
+      # Builds a real package on a real filesystem and reads it back. On macOS
+      # and Linux this is the claim under test.
+      - name: Self-test (build an MSI end to end)
+        run: dotnet run --project src/MsiMaker.Cli -c Release --no-build -- selftest
+
+      - name: Upload the CLI
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: msimaker-cli
+          path: src/MsiMaker.Cli/bin/Release/net10.0/
+          retention-days: 7
+
+  # Signing is the one part that needs a tool installed. osslsigncode is the
+  # cross-platform signer, so this proves a package built on macOS can also be
+  # signed there.
+  signing:
+    name: Sign on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install osslsigncode (macOS)
+        if: runner.os == 'macOS'
+        run: brew install osslsigncode
+
+      - name: Install osslsigncode (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y osslsigncode
+
+      - name: Build
+        run: dotnet build src/MsiMaker.Cli/MsiMaker.Cli.csproj -c Release
+
+      - name: Sign a package built on this machine
+        run: bash .github/scripts/test-signing.sh
+        env:
+          MSIMAKER_CI_PFX_PASSWORD: ci-test-password
+
+  # Only Windows can actually install what we build, so the lifecycle test -
+  # install, upgrade in place, uninstall - lives here. This is the test that
+  # catches an MSI that is structurally valid and still wrong.
+  windows-lifecycle:
+    name: Install, upgrade and uninstall (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build
+        run: dotnet build src/MsiMaker.Cli/MsiMaker.Cli.csproj -c Release
+
+      - name: Install, upgrade, uninstall
+        shell: pwsh
+        run: .github/scripts/Test-WindowsLifecycle.ps1
+
+      - name: Upload installer logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: msiexec-logs
+          path: ${{ runner.temp }}/msimaker-ci/*.log
+          retention-days: 7

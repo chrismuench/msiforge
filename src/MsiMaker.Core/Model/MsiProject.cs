@@ -305,8 +305,15 @@ public sealed class MsiProject
         if (parts.Length > 0 && int.TryParse(parts[0], out int major) && major > 255)
             errors.Add("Version major field must be 0-255.");
 
-        if (Files.Count == 0 && Run.Count == 0 && Registry.Count == 0)
-            errors.Add("Package has no payload: add at least one file.");
+        // Report a folder that is not there by name. ExpandFolders skips a
+        // missing folder, so without this the only symptom is "no payload",
+        // which sends the author looking in entirely the wrong place.
+        foreach (var folder in Folders)
+            if (!Directory.Exists(folder.SourceDir))
+                errors.Add($"Payload folder not found: {folder.SourceDir}");
+
+        if (Files.Count == 0 && Folders.Count == 0 && Run.Count == 0 && Registry.Count == 0)
+            errors.Add("Package has no payload: add at least one file or folder.");
 
         foreach (var f in Files)
             if (!File.Exists(f.SourcePath)) errors.Add($"Payload file not found: {f.SourcePath}");

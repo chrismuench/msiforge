@@ -189,10 +189,17 @@ public class EngineTests
         // replace the versioned copy on disk, and RemoveExistingProducts then
         // deletes it - the upgrade silently removes the application.
         string dir = TempDir();
-        string exe = Path.Combine(dir, "notepad.exe");
-        string system = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "notepad.exe");
-        if (!File.Exists(system)) return; // not on this platform
-        File.Copy(system, exe, overwrite: true);
+        // A real versioned PE is needed, and only Windows is guaranteed to have
+        // one lying about. Elsewhere the unversioned half of the rule is still
+        // asserted below, rather than the whole test passing vacuously.
+        string exe = Path.Combine(dir, "sample.exe");
+        string system = OperatingSystem.IsWindows()
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "notepad.exe")
+            : "";
+
+        bool haveVersionedPe = system.Length > 0 && File.Exists(system);
+        if (haveVersionedPe) File.Copy(system, exe, overwrite: true);
+        else File.WriteAllBytes(exe, [0x4D, 0x5A, 0x90, 0x00]);   // an MZ stub, no version resource
 
         var project = new MsiProject
         {
@@ -209,11 +216,22 @@ public class EngineTests
         var db = MsiDatabase.Load(output);
         var row = db.Tables["File"].Rows.Single();
         string? version = row[4] as string;
-        Assert.False(string.IsNullOrWhiteSpace(version), "File.Version must be populated for a versioned PE.");
+        var hashRows = db.Tables.GetValueOrDefault("MsiFileHash")?.Rows ?? [];
 
-        // A versioned file must not also carry a hash row.
-        Assert.DoesNotContain(db.Tables.GetValueOrDefault("MsiFileHash")?.Rows ?? [],
-                              r => (string?)r[0] == (string?)row[0]);
+        if (haveVersionedPe)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(version), "File.Version must be populated for a versioned PE.");
+
+            // A versioned file must not also carry a hash row.
+            Assert.DoesNotContain(hashRows, r => (string?)r[0] == (string?)row[0]);
+        }
+        else
+        {
+            // The inverse rule, which holds on every platform: no version
+            // resource means no version, and a hash row instead.
+            Assert.Null(version);
+            Assert.Contains(hashRows, r => (string?)r[0] == (string?)row[0]);
+        }
     }
 
     [Fact]

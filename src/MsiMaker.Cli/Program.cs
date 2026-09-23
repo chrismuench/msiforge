@@ -20,6 +20,8 @@ if (args.Length == 0)
           intunewin <file.msi> [out]           Wrap an MSI as a Win32 .intunewin package
           sign      <file.msi> [project.json]  Authenticode-sign a package
           verify-signature <file.msi>          Check an existing signature
+          doctor                               What this machine can and cannot do
+          selftest                             Build and verify a package end to end
           inspect   <file.msi>                 Show identity, upgrade and table summary
           roundtrip <file.msi> <out.msi>       Read, rewrite and verify table fidelity
         """);
@@ -40,6 +42,8 @@ try
         case "recipe": return WriteRecipe(args[1], args[2], args.Length > 3 ? args[3] : null);
         case "upgrade": return UpgradeCheck(args[1], args[2]);
         case "intunewin": return MakeIntuneWin(args[1], args.Length > 2 ? args[2] : null);
+        case "selftest": return MsiMaker.Cli.SelfTest.Run();
+        case "doctor": return MsiMaker.Cli.SelfTest.Doctor();
         case "sign": return SignMsi(args[1], args.Length > 2 ? args[2] : null);
         case "verify-signature": return VerifySignature(args[1]);
         case "inspect": return Inspect(args[1]);

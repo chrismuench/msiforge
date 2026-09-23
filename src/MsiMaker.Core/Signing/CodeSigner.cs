@@ -448,23 +448,45 @@ public static class CodeSigner
             "-out", temp,
         };
 
-        if (!string.IsNullOrWhiteSpace(options.CertificatePath))
+        string? passwordFile = null;
+        try
         {
-            args.Add("-pkcs12");
-            args.Add(options.CertificatePath!);
-            if (!string.IsNullOrWhiteSpace(password)) { args.Add("-pass"); args.Add(password!); }
-        }
-        if (!string.IsNullOrWhiteSpace(options.TimestampUrl)) { args.Add("-ts"); args.Add(options.TimestampUrl); }
+            if (!string.IsNullOrWhiteSpace(options.CertificatePath))
+            {
+                args.Add("-pkcs12");
+                args.Add(options.CertificatePath!);
 
-        var (code, output) = Run(signer, args);
-        if (code != 0)
+                if (!string.IsNullOrWhiteSpace(password))
+                {
+                    // -pass would put the password in the process command line,
+                    // where any other user on the machine can read it out of the
+                    // process list. -readpass takes a file instead.
+                    passwordFile = Path.Combine(Path.GetTempPath(),
+                        "msimaker-pass-" + Guid.NewGuid().ToString("N"));
+                    WritePrivateFile(passwordFile, password!);
+                    args.Add("-readpass");
+                    args.Add(passwordFile);
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(options.TimestampUrl)) { args.Add("-ts"); args.Add(options.TimestampUrl); }
+
+            var (code, output) = Run(signer, args);
+            if (code != 0)
+            {
+                if (File.Exists(temp)) File.Delete(temp);
+                return new SigningResult(false, "osslsigncode", Redact(Summarise(output), password));
+            }
+
+            File.Move(temp, msiPath, overwrite: true);
+            return new SigningResult(true, "osslsigncode", Summarise(output));
+        }
+        finally
         {
-            if (File.Exists(temp)) File.Delete(temp);
-            return new SigningResult(false, "osslsigncode", Redact(Summarise(output), password));
+            if (passwordFile is not null && File.Exists(passwordFile))
+            {
+                try { File.Delete(passwordFile); } catch (IOException) { /* best effort */ }
+            }
         }
-
-        File.Move(temp, msiPath, overwrite: true);
-        return new SigningResult(true, "osslsigncode", Summarise(output));
     }
 
     /// <summary>Asks the signer whether the file carries a valid signature.</summary>
@@ -481,6 +503,17 @@ public static class CodeSigner
             : Run(signer, ["verify", "/pa", "/v", msiPath]);
 
         return new SigningResult(code == 0, useOssl ? "osslsigncode" : "signtool", Summarise(output));
+    }
+
+    /// <summary>
+    /// Writes a short-lived secret, readable only by the current user on
+    /// platforms that express that in file mode.
+    /// </summary>
+    private static void WritePrivateFile(string path, string contents)
+    {
+        File.WriteAllText(path, contents);
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
     }
 
     private static (int ExitCode, string Output) Run(string exe, IEnumerable<string> arguments)
