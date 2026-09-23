@@ -567,6 +567,12 @@ public static class MsiBuilder
             db.Std("Media").Add(1, 0, null, null, null, null);
         }
 
+        // Without this, Programs and Features shows a blank size. Windows expects
+        // kilobytes.
+        long payloadBytes = cabFiles.Sum(f => (long)f.Data.Length);
+        if (payloadBytes > 0)
+            db.SetProperty("ARPSIZE", Math.Max(1, payloadBytes / 1024).ToString());
+
         // Must come last: it only describes the tables that ended up present.
         db.AddValidation();
 

@@ -318,6 +318,11 @@ public sealed class MsiProject
         foreach (var f in Files)
             if (!File.Exists(f.SourcePath)) errors.Add($"Payload file not found: {f.SourcePath}");
 
+        // Caught here as well as in the cabinet writer, so the message names the
+        // project rather than surfacing from deep inside the build.
+        if (Files.Count > 65535)
+            errors.Add($"A package holds at most 65,535 files; this one has {Files.Count:N0}.");
+
         var targets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var f in Files)
             if (!targets.Add(f.EffectiveTarget)) errors.Add($"Duplicate target path: {f.EffectiveTarget}");

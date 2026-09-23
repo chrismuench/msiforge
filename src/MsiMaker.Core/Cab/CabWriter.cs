@@ -18,6 +18,12 @@ public sealed record CabFile(string Name, byte[] Data, DateTime Modified)
 public static class CabWriter
 {
     private const int BlockSize = 32768;      // MSZIP hard limit per data block
+
+    /// <summary>CFHEADER.cFiles is 16-bit.</summary>
+    public const int MaxFilesPerCabinet = 65535;
+
+    /// <summary>CFFOLDER.cCFData is 16-bit, so a folder tops out near 2 GB uncompressed.</summary>
+    public const int MaxBlocksPerFolder = 65535;
     private const ushort CompressNone = 0;
     private const ushort CompressMszip = 1;
 
@@ -25,6 +31,23 @@ public static class CabWriter
     {
         ArgumentNullException.ThrowIfNull(files);
         if (files.Count == 0) throw new ArgumentException("A cabinet needs at least one file.");
+
+        // CFHEADER.cFiles and CFFOLDER.cCFData are both 16-bit. Exceeding either
+        // would silently truncate on the cast and produce a cabinet that unpacks
+        // as far as the truncated count and then stops - a corrupt package that
+        // still looks like it built.
+        if (files.Count > MaxFilesPerCabinet)
+            throw new InvalidOperationException(
+                $"A cabinet holds at most {MaxFilesPerCabinet:N0} files; this package has {files.Count:N0}. "
+                + "Split the payload across multiple packages.");
+
+        long totalBytes = files.Sum(f => (long)f.Data.Length);
+        long blocksNeeded = (totalBytes + BlockSize - 1) / BlockSize;
+        if (blocksNeeded > MaxBlocksPerFolder)
+            throw new InvalidOperationException(
+                $"A cabinet folder holds at most {MaxBlocksPerFolder:N0} blocks of {BlockSize:N0} bytes "
+                + $"({(long)MaxBlocksPerFolder * BlockSize / (1024 * 1024 * 1024)} GB); this payload is "
+                + $"{totalBytes / (1024 * 1024):N0} MB. Split the payload across multiple packages.");
 
         // One folder holding every file, concatenated. Folder-relative offsets
         // are what CFFILE.uoffFolderStart points at.
