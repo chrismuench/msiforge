@@ -3,6 +3,7 @@ using System.Text;
 using MsiMaker.Core.Cab;
 using MsiMaker.Core.Model;
 using MsiMaker.Core.Msi;
+using MsiMaker.Core.Payload;
 
 namespace MsiMaker.Core.Build;
 
@@ -26,6 +27,7 @@ public static class MsiBuilder
 {
     // Custom action type bits, confirmed against WiX output (3154 = 18|64|1024|2048).
     private const int CaExeFromFile = 18;
+    private const int CaExeInDirectory = 34;
     private const int CaIgnoreReturn = 64;
     private const int CaDeferred = 1024;
     private const int CaNoImpersonate = 2048;
@@ -39,6 +41,8 @@ public static class MsiBuilder
 
     public static BuildResult Build(MsiProject project, string outputPath)
     {
+        project.ExpandFolders();
+
         var errors = project.Validate();
         if (errors.Count > 0)
             throw new InvalidOperationException("Project is not valid:\n  " + string.Join("\n  ", errors));
@@ -173,14 +177,25 @@ public static class MsiBuilder
             featureComponents.Add("MainFeature", componentId);
 
             byte[] bytes = File.ReadAllBytes(payload.SourcePath);
-            file.Add(fileId, componentId, fileName, bytes.Length, null, null, FileVital, sequence);
 
-            // Unversioned files are compared by hash, so MsiFileHash is what makes
-            // repair and upgrade replace them correctly.
-            byte[] md5 = MD5.HashData(bytes);
-            fileHash.Add(fileId, 0,
-                BitConverter.ToInt32(md5, 0), BitConverter.ToInt32(md5, 4),
-                BitConverter.ToInt32(md5, 8), BitConverter.ToInt32(md5, 12));
+            // A versioned file MUST declare its version here. Left null, Windows
+            // Installer treats it as unversioned, refuses to replace the versioned
+            // copy already on disk ("Disallowing installation of component ...
+            // since the same component with higher versioned keyfile exists"), and
+            // RemoveExistingProducts then deletes the old copy - so the upgrade
+            // silently removes the application.
+            string? fileVersion = ReadFileVersion(bytes);
+            file.Add(fileId, componentId, fileName, bytes.Length, fileVersion, null, FileVital, sequence);
+
+            // MsiFileHash applies only to unversioned files; for a versioned file
+            // the version is what drives replacement, and a hash row is invalid.
+            if (fileVersion is null)
+            {
+                byte[] md5 = MD5.HashData(bytes);
+                fileHash.Add(fileId, 0,
+                    BitConverter.ToInt32(md5, 0), BitConverter.ToInt32(md5, 4),
+                    BitConverter.ToInt32(md5, 8), BitConverter.ToInt32(md5, 12));
+            }
 
             cabFiles.Add(new CabFile(fileId, bytes, File.GetLastWriteTime(payload.SourcePath)));
             fileIdByTarget[target] = fileId;
@@ -230,6 +245,85 @@ public static class MsiBuilder
             }
         }
 
+        // --------------------------------------------------- scheduled tasks
+        // The task XML is generated here and shipped as an ordinary payload file,
+        // so it is versioned with the package and removed on uninstall.
+        var taskFiles = new List<(ScheduledTaskSpec Task, string FileId)>();
+        foreach (var task in project.Tasks)
+        {
+            string exeTarget = task.ExePath.Replace('\\', '/').TrimStart('/');
+            if (!fileIdByTarget.TryGetValue(exeTarget, out string? exeFileId))
+            {
+                warnings.Add($"Scheduled task '{task.Name}' runs '{task.ExePath}', which is not in the payload; skipped.");
+                continue;
+            }
+
+            // The install directory is a token here, not "[#fileId]": MSI formats
+            // its own fields but never the contents of a file, so a formatted
+            // expression written into the XML would reach the device verbatim.
+            string windowsRelative = exeTarget.Replace('/', '\\');
+            string xml = TaskXml.Build(task,
+                TaskXml.InstallDirToken + "\\" + windowsRelative,
+                task.Arguments,
+                TaskXml.InstallDirToken);
+            byte[] xmlBytes = TaskXml.Encode(xml);
+
+            sequence++;
+            string taskFileName = MsiProject.Sanitize(task.Name).Replace(' ', '_') + ".xml";
+            string taskFileId = UniqueId("f_task_" + taskFileName, identifiers);
+            string taskComponentId = UniqueId("c_task_" + taskFileName, componentIds);
+            Guid taskGuid = DeterministicGuid.Create(project.UpgradeCode, "Component/task/" + task.FullName);
+
+            component.Add(taskComponentId, DeterministicGuid.Format(taskGuid), "INSTALLFOLDER",
+                          componentAttributes, null, taskFileId);
+            featureComponents.Add("MainFeature", taskComponentId);
+            file.Add(taskFileId, taskComponentId, taskFileName, xmlBytes.Length, null, null, FileVital, sequence);
+
+            byte[] taskMd5 = MD5.HashData(xmlBytes);
+            fileHash.Add(taskFileId, 0,
+                BitConverter.ToInt32(taskMd5, 0), BitConverter.ToInt32(taskMd5, 4),
+                BitConverter.ToInt32(taskMd5, 8), BitConverter.ToInt32(taskMd5, 12));
+
+            cabFiles.Add(new CabFile(taskFileId, xmlBytes, DateTime.Now));
+            taskFiles.Add((task, taskFileId));
+        }
+
+        // One registrar script serves every task in the package.
+        string? registrarFileId = null;
+        if (taskFiles.Count > 0)
+        {
+            byte[] scriptBytes = new UTF8Encoding(false).GetBytes(TaskXml.RegistrarScript);
+            sequence++;
+            registrarFileId = UniqueId("f_msimaker_register_task.ps1", identifiers);
+            string scriptComponentId = UniqueId("c_msimaker_register_task", componentIds);
+            Guid scriptGuid = DeterministicGuid.Create(project.UpgradeCode, "Component/task-registrar");
+
+            component.Add(scriptComponentId, DeterministicGuid.Format(scriptGuid), "INSTALLFOLDER",
+                          componentAttributes, null, registrarFileId);
+            featureComponents.Add("MainFeature", scriptComponentId);
+            file.Add(registrarFileId, scriptComponentId, "MsiMaker-RegisterTask.ps1",
+                     scriptBytes.Length, null, null, FileVital, sequence);
+
+            byte[] scriptMd5 = MD5.HashData(scriptBytes);
+            fileHash.Add(registrarFileId, 0,
+                BitConverter.ToInt32(scriptMd5, 0), BitConverter.ToInt32(scriptMd5, 4),
+                BitConverter.ToInt32(scriptMd5, 8), BitConverter.ToInt32(scriptMd5, 12));
+            cabFiles.Add(new CabFile(registrarFileId, scriptBytes, DateTime.Now));
+        }
+
+        // SystemFolder is the 32-bit system directory (SysWOW64 on x64); the
+        // native one is System64Folder.
+        string systemDirId = is64 ? "System64Folder" : "SystemFolder";
+        string powershellDirId = "d_powershell_v1_0";
+        if (taskFiles.Count > 0)
+        {
+            if (identifiers.Add(systemDirId)) directory.Add(systemDirId, "TARGETDIR", ".");
+            if (identifiers.Add("d_windowspowershell"))
+                directory.Add("d_windowspowershell", systemDirId, "WindowsPowerShell");
+            if (identifiers.Add(powershellDirId))
+                directory.Add(powershellDirId, "d_windowspowershell", "v1.0");
+        }
+
         // -------------------------------------------------------- run actions
         var installSequence = db.Std("InstallExecuteSequence");
         foreach (var (action, condition, seq) in MsiSchema.Sequences["InstallExecuteSequence"])
@@ -274,6 +368,42 @@ public static class MsiBuilder
             }
         }
 
+        if (taskFiles.Count > 0)
+        {
+            var customAction = db.Std("CustomAction");
+            int createSlot = 4300;   // after InstallFiles, so the XML is on disk
+            int deleteSlot = 3400;   // before RemoveFiles, while it still is
+
+            foreach (var (task, taskFileId) in taskFiles)
+            {
+                string create = UniqueId($"ca_task_create_{task.Name}", identifiers);
+                customAction.Add(create,
+                    CaExeInDirectory | CaDeferred | CaNoImpersonate,
+                    powershellDirId,
+                    "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass "
+                    + $"-File \"[#{registrarFileId}]\" "
+                    + $"-Xml \"[#{taskFileId}]\" "
+                    // A directory property ends in a backslash, and "...\\" would
+                    // escape the closing quote. The trailing dot keeps the argument
+                    // well formed and still names the same directory.
+                    + "-InstallDir \"[INSTALLFOLDER].\" "
+                    + $"-TaskName \"{task.FullName}\"",
+                    null);
+                installSequence.Add(create, "NOT REMOVE", createSlot);
+                createSlot += 10;
+
+                // Deleting is allowed to fail: the task may already be gone.
+                string delete = UniqueId($"ca_task_delete_{task.Name}", identifiers);
+                customAction.Add(delete,
+                    CaExeInDirectory | CaDeferred | CaNoImpersonate | CaIgnoreReturn,
+                    systemDirId,
+                    $"schtasks.exe /Delete /TN \"{task.FullName}\" /F",
+                    null);
+                installSequence.Add(delete, "REMOVE~=\"ALL\"", deleteSlot);
+                deleteSlot += 10;
+            }
+        }
+
         // ------------------------------------------------------ feature and media
         db.Std("Feature").Add("MainFeature", null, project.ProductName, null, 2, 1, null, 0);
 
@@ -304,6 +434,23 @@ public static class MsiBuilder
 
         return new BuildResult(outputPath, productCode, project.UpgradeCode, version, packageCode,
                                new FileInfo(outputPath).Length, warnings);
+    }
+
+    /// <summary>
+    /// The version Windows Installer should compare, or null for a file that
+    /// genuinely carries no version resource.
+    /// </summary>
+    private static string? ReadFileVersion(byte[] bytes)
+    {
+        if (bytes.Length < 2 || bytes[0] != 'M' || bytes[1] != 'Z') return null;
+
+        var pe = new PeFile(bytes);
+        string? version = pe.Version?.FixedFileVersion;
+        if (string.IsNullOrWhiteSpace(version)) return null;
+
+        // A file whose version resource reads 0.0.0.0 is effectively unversioned.
+        var parts = version.Split('.');
+        return parts.All(p => int.TryParse(p, out int v) && v == 0) ? null : version;
     }
 
     private static string? Combine(string? custom, string standard) =>

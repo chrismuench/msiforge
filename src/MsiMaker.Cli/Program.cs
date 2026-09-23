@@ -24,6 +24,7 @@ try
     switch (args[0])
     {
         case "mktest": return MakeMinimal(args[1]);
+        case "taskxml": return ShowTaskXml(args[1]);
         case "subset": return Subset(args[1], args[2], args[3..]);
         case "build": return BuildProject(args[1], args.Length > 2 ? args[2] : null);
         case "analyze": return Analyze(args[1], args.Length > 2 ? args[2] : null);
@@ -107,6 +108,20 @@ static int UpgradeCheck(string previous, string candidate)
     return report.Verdict == UpgradeVerdict.UpgradesInPlace ? 0 : 1;
 }
 
+/// <summary>Prints the Task Scheduler XML a project would register.</summary>
+static int ShowTaskXml(string projectPath)
+{
+    var project = MsiProject.Load(projectPath);
+    foreach (var task in project.Tasks)
+    {
+        Console.WriteLine($"==== {task.FullName} ====");
+        Console.WriteLine(MsiMaker.Core.Build.TaskXml.Build(
+            task, $"[#f_{task.ExePath}]", task.Arguments, "[INSTALLFOLDER]"));
+        Console.WriteLine();
+    }
+    return 0;
+}
+
 /// <summary>
 /// Rewrites an MSI keeping only the named tables, so a reader disagreement can
 /// be bisected down to the table that triggers it.
@@ -152,6 +167,9 @@ static int BuildProject(string projectPath, string? outputPath)
     foreach (var f in project.Files)
         if (!Path.IsPathRooted(f.SourcePath))
             f.SourcePath = Path.GetFullPath(Path.Combine(baseDir, f.SourcePath));
+    foreach (var d in project.Folders)
+        if (!Path.IsPathRooted(d.SourceDir))
+            d.SourceDir = Path.GetFullPath(Path.Combine(baseDir, d.SourceDir));
 
     outputPath ??= Path.Combine(baseDir, "out",
         $"{MsiProject.Sanitize(project.ProductName)}-{project.ComparableVersion}.msi");

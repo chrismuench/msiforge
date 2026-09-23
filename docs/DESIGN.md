@@ -131,17 +131,65 @@ Detection scripts are deliberately **not** generated. Intune's Win32 MSI
 detection rule reads the ProductCode and can version-compare; a PowerShell
 detection script adds nothing and becomes another artefact to version-stamp.
 
+## Bugs the end-to-end tests found
+
+Every one of these produced a file our own reader accepted and Windows Installer
+did not, so none would have been caught by round-tripping alone. They are the
+argument for testing against msiexec with a real payload.
+
+| Symptom | Cause |
+|---|---|
+| `1620` package could not be opened | Summary stream written as UTF-8. Windows Installer reads every string property back as empty, and a package with no Template is invalid. The database string pool may be UTF-8; the summary stream may not. |
+| `2211` could not create table | `_Validation` absent and unlisted in `_Tables`. |
+| `2229` could not load table | Rows must be stored in primary-key order, and for string keys that order is by string-pool index. Indices are reassigned on every write, so preserving source row order silently breaks the sort. |
+| Tables load, then fail after an unrelated edit | String-pool refcounts were under-counted: `_Columns` names a table once per column, not once. |
+| **Upgrade deletes 100 of 136 files** | `File.Version` left null. Windows Installer treats the file as unversioned, refuses to replace the versioned copy on disk (`Disallowing installation of component ... higher versioned keyfile exists`), then `RemoveExistingProducts` removes it. |
+| Scheduled task never registers | Task XML shipped BOM-less UTF-16 (`Encoding.GetBytes` emits no preamble), so it decoded as UTF-8: "task XML is malformed ... one root element". |
+| Custom action fails with error 1 | `[INSTALLFOLDER]` ends in a backslash, so `"...\"` escaped the closing quote. A trailing `.` keeps the argument well formed. |
+| Task XML contains `[#fileId]` verbatim | MSI formats its own table fields but never the contents of a file it installs. |
+
+## Scheduled tasks
+
+An Intune platform script runs once and will not run again unless the script or
+policy changes, so it cannot keep a fleet current on its own. Packages therefore
+register a real scheduled task, removed again on uninstall.
+
+The task is registered from XML rather than `schtasks` switches because the
+settings that make a fleet-wide task safe have no switch equivalent: a random
+delay so the estate does not all download at once, catch-up after a missed
+start, battery and network conditions, and an execution time limit.
+
+Because MSI never formats file contents, the XML ships with an install-directory
+token that a small generated PowerShell registrar substitutes at install time.
+
+## HP Image Assistant
+
+HP's own Intune guidance packages HPIA as a Win32 app wrapping `Install.cmd`
+(`hpia.exe /s /e /f c:\hpia`), detected by "the file `hpimageassistant.exe`
+exists". That detection can never go from true to false, so **a new HPIA version
+is never deployed** - the device already looks compliant. Uninstall is
+`remove-item -recurse`.
+
+Packaged as an MSI instead, the SoftPaq is extracted at build time and its files
+shipped directly: 136 files, 27 MB of payload, a 10.9 MB package. Intune then
+detects on ProductCode and version, so upgrades work, and uninstall is a real
+uninstall. `samples/hpia-with-scheduled-task.json` also registers the weekly
+analyse-and-install task using HP's documented command line.
+
 ## Status
 
 | Component | State |
 |---|---|
-| CFBF reader/writer | Working; round-trips a WiX MSI exactly |
-| MSI string pool, tables, summary info | Working; accepted by `msi.dll` |
-| Harvested standard schema (25 tables) | Done |
-| CLI `inspect` / `roundtrip` | Working |
-| MSZIP cabinet writer | Not started |
-| Project model -> MSI build | Not started |
-| Upgrade doctor | Not started |
-| Installer detective (PE) | Not started |
-| Avalonia GUI | Not started |
-| `.intunewin` / Graph upload | Not started |
+| CFBF reader/writer | Round-trips a WiX MSI exactly |
+| MSI tables, string pool, summary info | Accepted by `msi.dll`; builds install, upgrade and uninstall under msiexec |
+| MSZIP cabinet writer | 27 MB payload to 10.9 MB, byte-exact on extraction |
+| Harvested schema, sequences, `_Validation` | Generated from a real MSI by `tools/genschema.py` |
+| Project model, folder payloads, builder | Working |
+| Installer detective (PE fingerprints) | Working; identifies HP SoftPaq, Inno, NSIS, Burn, NSIS, 7-Zip SFX and others |
+| Upgrade doctor | Working; verified against deliberately broken packages |
+| Scheduled tasks | Working; registered on install, removed on uninstall |
+| `.intunewin` packaging | Working; HMAC verified |
+| Avalonia GUI | Builds and runs on Windows; cross-compiles for macOS |
+| Regression tests | 19 passing |
+| Graph upload to Intune | Not implemented - needs a tenant to test against |
+| macOS verification | Cross-compiles; not yet run on a Mac |

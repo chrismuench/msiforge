@@ -1,0 +1,38 @@
+{
+  "ProductName": "HP Image Assistant",
+  "Manufacturer": "HP Inc.",
+  "Version": "5.3.7",
+  "UpgradeCode": "8f3b2d51-6c47-4a19-9e05-2d7c4b1a8e60",
+  "Platform": "X64",
+  "ManufacturerFolder": "HP",
+  "InstallFolder": "HPIA",
+  "Folders": [
+    { "SourceDir": "extracted" }
+  ],
+  "Tasks": [
+    {
+      "Name": "HP Image Assistant Update",
+      "Folder": "\\HP",
+      "Description": "Analyses the device against HP's reference and installs missing or out-of-date BIOS, firmware, drivers and software.",
+      "ExePath": "HPImageAssistant.exe",
+      "Arguments": "/Operation:Analyze /Category:All /Selection:All /Action:Install /Silent /Noninteractive /ReportFolder:C:\\ProgramData\\HP\\HPIA\\Reports /SoftpaqDownloadFolder:C:\\ProgramData\\HP\\HPIA\\Softpaqs",
+      "Trigger": "Weekly",
+      "DaysOfWeek": ["Sunday"],
+      "StartTime": "03:00",
+      "RunAsSystem": true,
+      "HighestPrivileges": true,
+      "StartWhenAvailable": true,
+      "RequireNetwork": true,
+      "RunOnBattery": false,
+      "RandomDelay": "PT2H",
+      "ExecutionTimeLimit": "PT3H"
+    }
+  ],
+  "Registry": [
+    { "Root": "HKLM", "Key": "SOFTWARE\\HP\\HPIA", "Name": "Version", "Value": "5.3.7" }
+  ],
+  "Arp": {
+    "AboutUrl": "https://hp.com/go/clientmanagement",
+    "Comments": "HP Image Assistant with a scheduled update task, packaged so Intune upgrades it on ProductCode and version."
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "ProductName": "7-Zip (MsiMaker wrapped)",
+  "Manufacturer": "Igor Pavlov",
+  "Version": "25.1.0",
+  "UpgradeCode": "9e4d1a77-2c63-4f0b-8a51-c7b93e5d6a20",
+  "Platform": "X64",
+  "InstallFolder": "MsiMaker 7-Zip",
+  "Files": [
+    { "SourcePath": "payload/7z-setup.exe" }
+  ],
+  "Run": [
+    {
+      "Id": "sevenzip",
+      "ExePath": "7z-setup.exe",
+      "Arguments": "/S /D=C:\\MsiMakerTest\\7-Zip",
+      "When": "Install",
+      "IgnoreExitCode": false
+    }
+  ],
+  "Registry": [
+    { "Root": "HKLM", "Key": "SOFTWARE\\MsiMaker\\SevenZip", "Name": "Version", "Value": "25.1.0" }
+  ],
+  "Arp": {
+    "AboutUrl": "https://www.7-zip.org/",
+    "Comments": "7-Zip wrapped as an MSI by MsiMaker"
+  }
+}

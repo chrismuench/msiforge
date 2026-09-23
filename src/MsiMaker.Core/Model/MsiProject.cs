@@ -26,6 +26,22 @@ public sealed class PayloadFile
 }
 
 /// <summary>
+/// A whole directory to install, expanded to individual files at build time.
+/// Real payloads are rarely a handful of files - an extracted SoftPaq is well
+/// over a hundred - so folders are a first-class input.
+/// </summary>
+public sealed class PayloadFolder
+{
+    public required string SourceDir { get; set; }
+
+    /// <summary>Destination under the install folder. Empty means the root.</summary>
+    public string? TargetPath { get; set; }
+
+    /// <summary>Glob-free exclusions, matched against the relative path.</summary>
+    public List<string> Exclude { get; set; } = [];
+}
+
+/// <summary>
 /// An executable, installed by the package, that the installer runs. This is how
 /// non-MSI installers (SoftPaq, Inno, NSIS) get wrapped.
 /// </summary>
@@ -128,9 +144,11 @@ public sealed class MsiProject
     public string? ManufacturerFolder { get; set; }
 
     public List<PayloadFile> Files { get; set; } = [];
+    public List<PayloadFolder> Folders { get; set; } = [];
     public List<RunAction> Run { get; set; } = [];
     public List<RegistryValue> Registry { get; set; } = [];
     public List<ShortcutSpec> Shortcuts { get; set; } = [];
+    public List<ScheduledTaskSpec> Tasks { get; set; } = [];
     public ArpInfo Arp { get; set; } = new();
     public OutputOptions Output { get; set; } = new();
 
@@ -186,6 +204,31 @@ public sealed class MsiProject
 
     public static MsiProject Load(string path) => FromJson(File.ReadAllText(path));
 
+    /// <summary>
+    /// Folds every <see cref="Folders"/> entry into <see cref="Files"/>. Safe to
+    /// call more than once: already-expanded folders are not duplicated.
+    /// </summary>
+    public void ExpandFolders()
+    {
+        foreach (var folder in Folders)
+        {
+            if (!Directory.Exists(folder.SourceDir)) continue;
+            string root = Path.GetFullPath(folder.SourceDir);
+            string prefix = (folder.TargetPath ?? "").Replace('\\', '/').Trim('/');
+
+            foreach (string path in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+            {
+                string relative = Path.GetRelativePath(root, path).Replace('\\', '/');
+                if (folder.Exclude.Any(x => relative.Contains(x, StringComparison.OrdinalIgnoreCase))) continue;
+
+                string target = prefix.Length == 0 ? relative : $"{prefix}/{relative}";
+                if (Files.Any(f => string.Equals(f.EffectiveTarget, target, StringComparison.OrdinalIgnoreCase)))
+                    continue;
+                Files.Add(new PayloadFile { SourcePath = path, TargetPath = target });
+            }
+        }
+    }
+
     /// <summary>Problems that would stop the package building or deploying correctly.</summary>
     public List<string> Validate()
     {
@@ -209,6 +252,14 @@ public sealed class MsiProject
         var targets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var f in Files)
             if (!targets.Add(f.EffectiveTarget)) errors.Add($"Duplicate target path: {f.EffectiveTarget}");
+
+        foreach (var t in Tasks)
+        {
+            if (string.IsNullOrWhiteSpace(t.Name)) errors.Add("A scheduled task needs a name.");
+            string target = t.ExePath.Replace('\\', '/').TrimStart('/');
+            if (!Files.Any(f => string.Equals(f.EffectiveTarget, target, StringComparison.OrdinalIgnoreCase)))
+                errors.Add($"Scheduled task '{t.Name}' runs '{t.ExePath}', which is not in the payload.");
+        }
 
         foreach (var r in Run)
             if (!Files.Any(f => string.Equals(f.EffectiveTarget, r.ExePath.Replace('\\', '/').TrimStart('/'),

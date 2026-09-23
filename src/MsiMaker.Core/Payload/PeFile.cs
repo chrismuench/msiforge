@@ -11,6 +11,13 @@ public sealed class PeVersionInfo
     /// <summary>Numeric file version from VS_FIXEDFILEINFO, the reliable one.</summary>
     public string? FileVersion { get; set; }
 
+    /// <summary>
+    /// The raw numeric a.b.c.d from VS_FIXEDFILEINFO, never overridden by the
+    /// string table. The MSI File.Version column must be strictly numeric, and
+    /// string-table versions routinely are not ("25.01", "5.3.7.802+sha").
+    /// </summary>
+    public string? FixedFileVersion { get; set; }
+
     public string? ProductVersion { get; set; }
 
     /// <summary>String-table values: CompanyName, ProductName, FileDescription and friends.</summary>
@@ -182,6 +189,7 @@ public sealed class PeFile
             uint prodMs = BinaryPrimitives.ReadUInt32LittleEndian(span[(i + 16)..]);
             uint prodLs = BinaryPrimitives.ReadUInt32LittleEndian(span[(i + 20)..]);
             info.FileVersion = $"{fileMs >> 16}.{fileMs & 0xFFFF}.{fileLs >> 16}.{fileLs & 0xFFFF}";
+            info.FixedFileVersion = info.FileVersion;
             info.ProductVersion = $"{prodMs >> 16}.{prodMs & 0xFFFF}.{prodLs >> 16}.{prodLs & 0xFFFF}";
             break;
         }
@@ -205,7 +213,18 @@ public sealed class PeFile
             if (value.Length > 0) info.Strings[key] = value;
         }
 
+        // The string table is what Windows itself reports and what a vendor
+        // actually publishes; VS_FIXEDFILEINFO is often left at a build-tool
+        // default, and some self-extractors carry more than one version
+        // resource. Prefer the string table and fall back to the fixed block.
+        if (info.Strings.TryGetValue("ProductVersion", out string? productString) && HasDigit(productString))
+            info.ProductVersion = productString;
+        if (info.Strings.TryGetValue("FileVersion", out string? fileString) && HasDigit(fileString))
+            info.FileVersion = fileString;
+
         return info.FileVersion is null && info.Strings.Count == 0 ? null : info;
+
+        static bool HasDigit(string s) => s.Any(char.IsAsciiDigit);
     }
 
     /// <summary>True if the raw bytes contain this ASCII marker.</summary>
