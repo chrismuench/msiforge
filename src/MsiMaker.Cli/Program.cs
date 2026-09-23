@@ -17,6 +17,7 @@ if (args.Length == 0)
           recipes                              List the built-in recipes for awkward applications
           recipe    <id> <out.json> [payload]  Write a starting project from a recipe
           upgrade   <old.msi> <new.msi>        Will Intune actually upgrade? Check before shipping
+          intune    <file.msi>                 Exactly what to enter in the Intune portal
           intunewin <file.msi> [out]           Wrap an MSI as a Win32 .intunewin package
           sign      <file.msi> [project.json]  Authenticode-sign a package
           verify-signature <file.msi>          Check an existing signature
@@ -41,6 +42,7 @@ try
         case "recipes": return ListRecipes();
         case "recipe": return WriteRecipe(args[1], args[2], args.Length > 3 ? args[3] : null);
         case "upgrade": return UpgradeCheck(args[1], args[2]);
+        case "intune": return ShowIntuneConfiguration(args[1]);
         case "intunewin": return MakeIntuneWin(args[1], args.Length > 2 ? args[2] : null);
         case "selftest": return MsiMaker.Cli.SelfTest.Run();
         case "doctor": return MsiMaker.Cli.SelfTest.Doctor();
@@ -223,6 +225,13 @@ static int VerifySignature(string msiPath)
         ? $"signature valid ({result.Tool})"
         : $"signature NOT valid: {result.Detail}");
     return result.Signed ? 0 : 1;
+}
+
+static int ShowIntuneConfiguration(string msiPath)
+{
+    var config = IntuneConfiguration.From(msiPath);
+    Console.Write(config.Describe());
+    return 0;
 }
 
 static int MakeIntuneWin(string msiPath, string? output)

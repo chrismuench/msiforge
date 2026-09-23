@@ -38,6 +38,14 @@ public sealed class CfbReader
     public IReadOnlyList<CfbStream> Streams { get; }
     public Guid RootClsid { get; }
 
+    /// <summary>
+    /// Names of storages nested below the root. An MSI database has none, but a
+    /// patch package carries its transforms in substorages - and anything that
+    /// walks the file as a flat list of streams, such as the signature digest,
+    /// would quietly ignore them.
+    /// </summary>
+    public IReadOnlyList<string> SubStorages { get; }
+
     public CfbReader(byte[] data)
     {
         _data = data;
@@ -100,6 +108,16 @@ public sealed class CfbReader
             _miniStream = ReadChain(start, size);
             break;
         }
+
+        var storages = new List<string>();
+        for (int i = 0; i < entryCount; i++)
+        {
+            var span = dir.AsSpan(i * 128, 128);
+            if ((CfbEntryType)span[66] != CfbEntryType.Storage) continue;
+            int storageNameLen = BinaryPrimitives.ReadUInt16LittleEndian(span[64..]);
+            if (storageNameLen >= 2) storages.Add(Encoding.Unicode.GetString(span[..(storageNameLen - 2)]));
+        }
+        SubStorages = storages;
 
         var streams = new List<CfbStream>();
         for (int i = 0; i < entryCount; i++)

@@ -83,6 +83,17 @@ public static class MsiSigner
     /// </summary>
     public static byte[] ComputeDigest(CfbReader reader, HashAlgorithmName algorithm, byte[]? prehash = null)
     {
+        // Refuse rather than sign something we would digest wrongly. The walk
+        // below treats the file as a flat list of streams, which is exactly what
+        // an MSI database is; a patch package keeps its transforms in
+        // substorages, and silently ignoring them would produce a signature that
+        // looks correct and is rejected on the device.
+        if (reader.SubStorages.Count > 0)
+            throw new NotSupportedException(
+                $"This package contains nested storages ({string.Join(", ", reader.SubStorages)}), which the "
+                + "digest does not walk. Signing it would produce an invalid signature. Sign patch packages "
+                + "with signtool or osslsigncode instead.");
+
         using var hash = IncrementalHash.CreateHash(algorithm);
         if (prehash is { Length: > 0 }) hash.AppendData(prehash);
 
