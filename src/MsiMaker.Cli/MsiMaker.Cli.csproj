@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>msimaker</AssemblyName>
+    <RootNamespace>MsiMaker.Cli</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup><ProjectReference Include="../MsiMaker.Core/MsiMaker.Core.csproj" /></ItemGroup>
+</Project>
