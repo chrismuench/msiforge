@@ -17,15 +17,23 @@
             Padding="{DynamicResource ChromePadding}">
       <Grid ColumnDefinitions="Auto,*,Auto">
 
-        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-          <Border Background="{DynamicResource AccentBrush}" CornerRadius="6" Width="28" Height="28">
-            <TextBlock Text="M" FontSize="15" FontWeight="Bold"
-                       Foreground="{DynamicResource AccentTextBrush}"
-                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="11" VerticalAlignment="Center">
+          <!--
+            The mark, rather than a letter in a box: the same package glyph the
+            payload step uses, so the product and the thing it makes share one
+            piece of drawing.
+          -->
+          <Border Background="{DynamicResource AccentBrush}" CornerRadius="8" Width="28" Height="28"
+                  BoxShadow="{DynamicResource RaisedShadow}">
+            <Path Data="{StaticResource IconPackage}"
+                  Stroke="{DynamicResource AccentTextBrush}" StrokeThickness="1.3"
+                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="None"
+                  Width="16" Height="16"
+                  HorizontalAlignment="Center" VerticalAlignment="Center" />
           </Border>
-          <TextBlock Text="MsiMaker" FontSize="17" FontWeight="SemiBold"
+          <TextBlock Text="MsiMaker" FontSize="17" FontWeight="SemiBold" LetterSpacing="-0.2"
                      Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center" />
-          <Border Width="1" Height="16" Background="{DynamicResource BorderSubtleBrush}"
+          <Border Width="1" Height="15" Background="{DynamicResource BorderSubtleBrush}"
                   VerticalAlignment="Center" />
           <TextBlock Text="Build MSIs that upgrade cleanly in Intune" FontSize="12.5"
                      Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"
@@ -33,44 +41,157 @@
         </StackPanel>
 
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-          <Button Name="OpenProjectButton" Content="Open project…" Classes="quiet" />
-          <Button Name="SaveProjectButton" Content="Save project…" />
+          <Button Name="OpenProjectButton" Classes="quiet">
+            <StackPanel Orientation="Horizontal" Spacing="7">
+              <Path Classes="icon" Data="{StaticResource IconFolder}" />
+              <TextBlock Text="Open project…" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+          <Button Name="SaveProjectButton">
+            <StackPanel Orientation="Horizontal" Spacing="7">
+              <Path Classes="icon" Data="{StaticResource IconSave}" />
+              <TextBlock Text="Save project…" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
         </StackPanel>
 
       </Grid>
     </Border>
 
-    <!-- ============================================================ status bar -->
+    <!-- ========================================================= step indicator -->
+    <!--
+      The wizard's spine, and the only navigation in the window. It replaces the
+      tab strip rather than sitting beside it: numbered while ahead, ticked once
+      satisfied, filled while current. Every step stays clickable - it is a
+      suggested route, not a cage - and the two that can be skipped say so.
+    -->
+    <Border DockPanel.Dock="Top"
+            Background="{DynamicResource ChromeBrush}"
+            BorderBrush="{DynamicResource BorderSubtleBrush}"
+            BorderThickness="0,0,0,1"
+            Padding="14,5">
+      <ListBox Classes="steps" ItemsSource="{Binding Steps}"
+               SelectedIndex="{Binding CurrentStep, Mode=TwoWay}"
+               ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+               ScrollViewer.VerticalScrollBarVisibility="Disabled">
+        <ListBox.ItemsPanel>
+          <ItemsPanelTemplate>
+            <StackPanel Orientation="Horizontal" />
+          </ItemsPanelTemplate>
+        </ListBox.ItemsPanel>
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:WizardStep">
+            <StackPanel Orientation="Horizontal" Spacing="9">
+              <Border Classes="stepmark"
+                      Classes.done="{Binding IsDone}"
+                      Classes.current="{Binding IsCurrent}">
+                <Panel>
+                  <TextBlock Classes="stepnum" Text="{Binding NumberText}"
+                             IsVisible="{Binding ShowsNumber}" />
+                  <Path Classes="tick" Data="{StaticResource IconTickSmall}"
+                        IsVisible="{Binding IsDone}" />
+                </Panel>
+              </Border>
+              <TextBlock Classes="steplabel"
+                         Classes.done="{Binding IsDone}"
+                         Classes.current="{Binding IsCurrent}"
+                         Text="{Binding Name}" />
+              <TextBlock Classes="stepopt" Text="optional" IsVisible="{Binding ShowsOptional}" />
+            </StackPanel>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </Border>
+
+    <!-- =============================================================== footer -->
+    <!--
+      Docked, so it is on screen whatever the page above is doing. It carries
+      everything about position at once: where you came from, what the app last
+      did, which step this is, why Next is off if it is, and - named, never just
+      "Next" - where the button is about to take you.
+    -->
     <Border DockPanel.Dock="Bottom"
             Background="{DynamicResource ChromeBrush}"
             BorderBrush="{DynamicResource BorderSubtleBrush}"
             BorderThickness="0,1,0,0"
-            Padding="20,7">
-      <StackPanel Orientation="Horizontal" Spacing="10">
-        <Ellipse Width="7" Height="7" VerticalAlignment="Center"
-                 Fill="{DynamicResource AccentBrush}" />
-        <TextBlock Name="StatusText" Text="Ready" FontSize="12" VerticalAlignment="Center"
-                   Foreground="{DynamicResource TextSecondaryBrush}"
-                   TextTrimming="CharacterEllipsis" />
-      </StackPanel>
+            Padding="20,9">
+      <Grid ColumnDefinitions="Auto,*,Auto">
+
+        <Button Grid.Column="0" Name="WizardBackButton" Classes="quiet"
+                IsVisible="{Binding !IsFirstStep}">
+          <StackPanel Orientation="Horizontal" Spacing="7">
+            <Path Classes="icon" Data="{StaticResource IconArrowLeft}" />
+            <TextBlock Text="Back" VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
+
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="9"
+                    Margin="12,0" VerticalAlignment="Center">
+          <Ellipse Width="7" Height="7" VerticalAlignment="Center"
+                   Fill="{DynamicResource AccentBrush}" />
+          <TextBlock Name="StatusText" Text="Ready" FontSize="12" VerticalAlignment="Center"
+                     Foreground="{DynamicResource TextSecondaryBrush}"
+                     TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
+          <!-- Never a grey button on its own: say what is missing. -->
+          <TextBlock Classes="blocked" Text="{Binding StepBlockReason}"
+                     IsVisible="{Binding IsBlocked}" />
+          <TextBlock Classes="steppos" Text="{Binding PositionLabel}" />
+
+          <Button Name="WizardNextButton" Classes="primary"
+                  IsVisible="{Binding !IsLastStep}" IsEnabled="{Binding CanAdvance}">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBlock Text="{Binding NextLabel}" VerticalAlignment="Center" />
+              <Path Classes="icon" Data="{StaticResource IconArrowRight}" />
+            </StackPanel>
+          </Button>
+
+          <!--
+            The last step's primary action is the build itself, not another
+            "Next" - the footer is the same object throughout, it just stops
+            being navigation once there is nowhere left to go.
+          -->
+          <Button Name="BuildButton" Classes="primary"
+                  IsVisible="{Binding IsLastStep}" IsEnabled="{Binding CanBuild}">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Path Classes="icon" Data="{StaticResource IconBuild}" />
+              <TextBlock Text="Build MSI" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+
+      </Grid>
     </Border>
 
-    <TabControl Name="MainTabs">
+    <!--
+      Still a TabControl underneath: it hosts and switches the pages exactly as
+      before. Its own header strip is folded away by the template, and the step
+      indicator drives SelectedIndex through the view model instead.
+    -->
+    <TabControl Name="MainTabs" SelectedIndex="{Binding CurrentStep, Mode=TwoWay}">
 
-      <!-- ============================================ Library -->
+      <!-- ====================================================== 1. Start -->
       <!--
         First, because the cheapest way to package an awkward application is to
         start from somebody who has already been caught by it. The detail pane
         leads with the awkwardness prose for the same reason: the silent
         switches are in a vendor PDF somewhere, the trap is not.
       -->
-      <TabItem Header="Library">
+      <TabItem Header="Start">
         <Grid Margin="{DynamicResource PagePadding}"
               RowDefinitions="Auto,*" ColumnDefinitions="300,16,*">
 
           <StackPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3">
-            <TextBlock Classes="h1" Text="Start here" />
-            <TextBlock Classes="sub" Margin="0,0,0,10"
+            <StackPanel Orientation="Horizontal" Spacing="12">
+              <Border Classes="pageicon">
+                <Path Classes="icon" Data="{StaticResource IconBook}" />
+              </Border>
+              <TextBlock Classes="h1" Text="Start here" Margin="0" VerticalAlignment="Center" />
+            </StackPanel>
+
+            <TextBlock Classes="sub" Margin="0,10,0,14"
                        Text="A recipe is the best start when one fits: a working project for an application that does not package the obvious way, plus the reason it does not. Pick one below, hand it the payload you downloaded, and you get a starting project instead of an afternoon in vendor documentation." />
 
             <!--
@@ -78,11 +199,16 @@
               of equal weight: the recipe list below is the recommendation, and
               three equal buttons would say the three are interchangeable.
             -->
-            <Border Classes="inner" Margin="0,0,0,14">
+            <Border Classes="inner" Margin="0,0,0,16">
               <StackPanel Orientation="Horizontal" Spacing="10">
                 <TextBlock Classes="hint" Margin="0" VerticalAlignment="Center"
                            Text="Already have one of your own, or packaging something not in the library?" />
-                <Button Name="OpenProjectOnLibraryButton" Content="Open project…" />
+                <Button Name="OpenProjectOnLibraryButton">
+                  <StackPanel Orientation="Horizontal" Spacing="7">
+                    <Path Classes="icon" Data="{StaticResource IconFolder}" />
+                    <TextBlock Text="Open project…" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Button>
                 <Button Name="StartBlankButton" Content="Start blank" Classes="quiet" />
               </StackPanel>
             </Border>
@@ -92,7 +218,7 @@
           <Border Grid.Row="1" Grid.Column="0" Classes="card" Margin="0" Padding="0">
             <DockPanel>
               <TextBlock DockPanel.Dock="Top" Classes="eyebrow" Text="RECIPES"
-                         Margin="14,13,14,6" />
+                         Margin="16,14,16,6" />
 
               <!--
                 The library's own location: findable, but folded away by
@@ -100,7 +226,7 @@
                 list of recipes is what the card is for.
               -->
               <Border DockPanel.Dock="Bottom" Classes="inner"
-                      CornerRadius="0,0,7,7" BorderThickness="0,1,0,0" Padding="8,2">
+                      CornerRadius="0,0,9,9" BorderThickness="0,1,0,0" Padding="10,2">
                 <Expander Header="Your own recipes" IsExpanded="False"
                           HorizontalAlignment="Stretch" Background="Transparent"
                           BorderThickness="0" Padding="0">
@@ -120,11 +246,12 @@
                 </Expander>
               </Border>
 
-              <ListBox ItemsSource="{Binding Recipes}" SelectedItem="{Binding SelectedRecipe}"
-                       Background="Transparent" BorderThickness="0" Padding="6,0,6,8">
+              <ListBox Classes="recipes" ItemsSource="{Binding Recipes}"
+                       SelectedItem="{Binding SelectedRecipe}"
+                       Background="Transparent" BorderThickness="0" Padding="7,0,7,8">
                 <ListBox.ItemTemplate>
                   <DataTemplate x:DataType="vm:RecipeRow">
-                    <Grid ColumnDefinitions="*,Auto" Margin="0,3">
+                    <Grid ColumnDefinitions="*,Auto">
                       <StackPanel Grid.Column="0" Spacing="1" VerticalAlignment="Center">
                         <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold"
                                    Foreground="{DynamicResource TextPrimaryBrush}"
@@ -163,11 +290,25 @@
               stay on screen while it is being read.
             -->
             <Border DockPanel.Dock="Bottom" Classes="card" Margin="0,12,0,0" Padding="14,12">
-              <StackPanel Spacing="6">
-                <Button Name="UseRecipeButton" Classes="primary" HorizontalAlignment="Left"
-                        Content="{Binding SelectedRecipe.UseLabel}" />
-                <TextBlock Classes="hint" Margin="0"
-                           Text="This replaces the current project. The template carries a realistic version, which is not necessarily the version you downloaded - set the Version on the Identity tab to the one you actually have, because the ProductCode Intune detects on is derived from it." />
+              <StackPanel Orientation="Horizontal" Spacing="12">
+                <Button Name="UseRecipeButton" Classes="primary">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Path Classes="icon" Data="{StaticResource IconArrowRight}" />
+                    <TextBlock Text="{Binding SelectedRecipe.UseLabel}" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Button>
+                <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+                  <TextBlock Classes="hint" Margin="0" VerticalAlignment="Center"
+                             Text="Replaces the current project" />
+                  <Button Classes="info">
+                    <Button.Flyout>
+                      <Flyout>
+                        <TextBlock Classes="disclosure"
+                                   Text="This replaces the current project. The template carries a realistic version, which is not necessarily the version you downloaded - set the Version on the Identity tab to the one you actually have, because the ProductCode Intune detects on is derived from it." />
+                      </Flyout>
+                    </Button.Flyout>
+                  </Button>
+                </StackPanel>
               </StackPanel>
             </Border>
 
@@ -175,7 +316,7 @@
             <StackPanel Spacing="0" Margin="0,0,4,0">
 
               <Border Classes="card">
-                <StackPanel Spacing="14">
+                <StackPanel Spacing="16">
 
                   <StackPanel Spacing="3">
                     <TextBlock Text="{Binding SelectedRecipe.Name}" FontSize="17" FontWeight="SemiBold"
@@ -187,17 +328,25 @@
                   <!-- Verified or untested, stated in full, above everything else. -->
                   <Border Classes="verdict pass"
                           IsVisible="{Binding SelectedRecipe.IsVerified}">
-                    <TextBlock Classes="verdicttext pass"
-                               Text="VERIFIED - this package was built, installed, upgraded and uninstalled from this repository." />
+                    <Grid ColumnDefinitions="Auto,*">
+                      <Path Grid.Column="0" Classes="icon" Data="{StaticResource IconCheckCircle}"
+                            Margin="0,1,11,0" />
+                      <TextBlock Grid.Column="1" Classes="verdicttext pass"
+                                 Text="VERIFIED - this package was built, installed, upgraded and uninstalled from this repository." />
+                    </Grid>
                   </Border>
                   <Border Classes="verdict warn"
                           IsVisible="{Binding SelectedRecipe.IsUntested}">
-                    <StackPanel Spacing="5">
-                      <TextBlock Classes="verdicttext warn"
-                                 Text="UNTESTED - nobody has run this one." />
-                      <TextBlock Classes="verdicttext warn" FontWeight="Normal" FontSize="12.5"
-                                 Text="The switches came from vendor documentation and were never built, installed or uninstalled here. Vendor documentation is usually right and occasionally a release out of date, and a wrong silent switch fails quietly across a whole fleet. Install it on one device and uninstall it again before this goes anywhere near a deployment ring." />
-                    </StackPanel>
+                    <Grid ColumnDefinitions="Auto,*">
+                      <Path Grid.Column="0" Classes="icon" Data="{StaticResource IconAlert}"
+                            Margin="0,1,11,0" />
+                      <StackPanel Grid.Column="1" Spacing="5">
+                        <TextBlock Classes="verdicttext warn"
+                                   Text="UNTESTED - nobody has run this one." />
+                        <TextBlock Classes="verdicttext warn" FontWeight="Normal" FontSize="12.5"
+                                   Text="The switches came from vendor documentation and were never built, installed or uninstalled here. Vendor documentation is usually right and occasionally a release out of date, and a wrong silent switch fails quietly across a whole fleet. Install it on one device and uninstall it again before this goes anywhere near a deployment ring." />
+                      </StackPanel>
+                    </Grid>
                   </Border>
 
                   <StackPanel Spacing="6">
@@ -214,7 +363,7 @@
               </Border>
 
               <Border Classes="card">
-                <StackPanel Spacing="14">
+                <StackPanel Spacing="16">
                   <TextBlock Classes="eyebrow" Text="WHERE THE PAYLOAD COMES FROM" Margin="0" />
 
                   <StackPanel Spacing="4" IsVisible="{Binding SelectedRecipe.HasDownloadUrl}">
@@ -228,9 +377,14 @@
                                          FontFamily="{DynamicResource MonoFont}" FontSize="11.5"
                                          TextWrapping="Wrap"
                                          Foreground="{DynamicResource TextSecondaryBrush}" />
-                    <Button Name="OpenRecipeUrlButton" Content="Open in browser" Classes="quiet"
+                    <Button Name="OpenRecipeUrlButton" Classes="quiet"
                             HorizontalAlignment="Left" Margin="0,4,0,0"
-                            IsEnabled="{Binding SelectedRecipe.CanOpenDownloadUrl}" />
+                            IsEnabled="{Binding SelectedRecipe.CanOpenDownloadUrl}">
+                      <StackPanel Orientation="Horizontal" Spacing="7">
+                        <Path Classes="icon" Data="{StaticResource IconExternal}" />
+                        <TextBlock Text="Open in browser" VerticalAlignment="Center" />
+                      </StackPanel>
+                    </Button>
                   </StackPanel>
 
                   <StackPanel Spacing="4" IsVisible="{Binding SelectedRecipe.HasDownloadNotes}">
@@ -246,15 +400,17 @@
               </Border>
 
               <Border Classes="card" IsVisible="{Binding SelectedRecipe.HasNotes}">
-                <StackPanel Spacing="8">
+                <StackPanel Spacing="10">
                   <TextBlock Classes="eyebrow" Text="NOTES" Margin="0" />
                   <ItemsControl ItemsSource="{Binding SelectedRecipe.Notes}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="x:String">
                         <Grid ColumnDefinitions="Auto,*" Margin="0,0,0,7">
-                          <TextBlock Grid.Column="0" Text="-" Classes="hint" Margin="0,0,8,0" />
+                          <Border Grid.Column="0" Width="3" Height="3" CornerRadius="999"
+                                  Margin="2,7,9,0" VerticalAlignment="Top"
+                                  Background="{DynamicResource BorderStrongBrush}" />
                           <TextBlock Grid.Column="1" Text="{Binding}" Classes="hint" Margin="0"
-                                     MaxWidth="660" HorizontalAlignment="Left" />
+                                     MaxWidth="620" HorizontalAlignment="Left" />
                         </Grid>
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -270,6 +426,9 @@
           <Border Grid.Row="1" Grid.Column="2" Classes="empty"
                   IsVisible="{Binding !HasSelectedRecipe}" VerticalAlignment="Top">
             <StackPanel Spacing="6">
+              <Viewbox Classes="mark">
+                <Path Classes="icon mark" Data="{StaticResource IconBook}" />
+              </Viewbox>
               <TextBlock Classes="empty" FontWeight="SemiBold" Text="No recipe selected" />
               <TextBlock Classes="empty"
                          Text="Choose an application on the left to see why it is awkward and what the recipe does about it." />
@@ -279,25 +438,56 @@
         </Grid>
       </TabItem>
 
-      <!-- ============================================ Payload -->
+      <!-- ==================================================== 2. Payload -->
       <TabItem Header="Payload">
         <ScrollViewer>
-          <StackPanel Margin="{DynamicResource PagePadding}">
-            <TextBlock Classes="h1" Text="What are you packaging?" />
+          <StackPanel Margin="{DynamicResource PagePadding}"
+                      MaxWidth="{StaticResource PageMeasure}">
+
+            <StackPanel Orientation="Horizontal" Spacing="12">
+              <Border Classes="pageicon">
+                <Path Classes="icon" Data="{StaticResource IconPackage}" />
+              </Border>
+              <TextBlock Classes="h1" Text="What are you packaging?" Margin="0" VerticalAlignment="Center" />
+            </StackPanel>
             <TextBlock Classes="sub"
                        Text="Add the files to install. If the payload is an installer executable, analyse it and MsiMaker will identify the framework and propose the switches that make it run silently." />
 
             <Border Classes="card">
-              <StackPanel Spacing="12">
-                <TextBlock Classes="eyebrow" Text="PAYLOAD FILES" Margin="0" />
+              <StackPanel Spacing="16">
 
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                  <Button Name="AddFilesButton" Content="Add files…" />
-                  <Button Name="AnalyseButton" Content="Re-analyse…" Classes="quiet" />
-                  <Button Name="RemoveFileButton" Content="Remove selected" Classes="quiet" />
+                  <TextBlock Classes="eyebrow" Text="PAYLOAD FILES" Margin="0" VerticalAlignment="Center" />
+                  <Button Classes="info">
+                    <Button.Flyout>
+                      <Flyout>
+                        <TextBlock Classes="disclosure"
+                                   Text="Adding a .exe or .msi runs the installer detective automatically. Re-analyse only when several installers were added at once and the wrong one was picked." />
+                      </Flyout>
+                    </Button.Flyout>
+                  </Button>
                 </StackPanel>
-                <TextBlock Classes="hint" Margin="0"
-                           Text="Adding a .exe or .msi runs the installer detective automatically. Re-analyse only when several installers were added at once and the wrong one was picked." />
+
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Button Name="AddFilesButton">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                      <Path Classes="icon" Data="{StaticResource IconPlus}" />
+                      <TextBlock Text="Add files…" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </Button>
+                  <Button Name="AnalyseButton" Classes="quiet">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                      <Path Classes="icon" Data="{StaticResource IconSearch}" />
+                      <TextBlock Text="Re-analyse…" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </Button>
+                  <Button Name="RemoveFileButton" Classes="quiet">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                      <Path Classes="icon" Data="{StaticResource IconTrash}" />
+                      <TextBlock Text="Remove selected" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </Button>
+                </StackPanel>
 
                 <Border Classes="inner" IsVisible="{Binding HasAnalysis}">
                   <StackPanel Spacing="8">
@@ -327,8 +517,11 @@
                   </DataGrid.Columns>
                 </DataGrid>
 
-                <Border Classes="empty" IsVisible="{Binding !HasFiles}" MinHeight="140" MaxHeight="260">
+                <Border Classes="empty" IsVisible="{Binding !HasFiles}" MinHeight="150" MaxHeight="260">
                   <StackPanel Spacing="6" VerticalAlignment="Center">
+                    <Viewbox Classes="mark">
+                      <Path Classes="icon mark" Data="{StaticResource IconPackage}" />
+                    </Viewbox>
                     <TextBlock Classes="empty" FontWeight="SemiBold" Text="No payload yet" />
                     <TextBlock Classes="empty"
                                Text="Add the installer you want to wrap, plus any config files it needs. An .exe or .msi is analysed the moment it is added." />
@@ -340,82 +533,186 @@
         </ScrollViewer>
       </TabItem>
 
-      <!-- ============================================ Identity -->
+      <!-- =================================================== 3. Identity -->
+      <!--
+        Three cards rather than one seven-row form. The grouping is the point:
+        what the thing is called, how Intune recognises it between versions, and
+        where it lands - and the rules behind each field now sit one click away
+        under the label instead of as a paragraph beneath every box.
+      -->
       <TabItem Header="Identity">
         <ScrollViewer>
-          <StackPanel Margin="{DynamicResource PagePadding}" MaxWidth="760" HorizontalAlignment="Left">
-            <TextBlock Classes="h1" Text="Package identity" />
+          <StackPanel Margin="{DynamicResource PagePadding}"
+                      MaxWidth="{StaticResource PageMeasure}">
+
+            <StackPanel Orientation="Horizontal" Spacing="12">
+              <Border Classes="pageicon">
+                <Path Classes="icon" Data="{StaticResource IconTag}" />
+              </Border>
+              <TextBlock Classes="h1" Text="Package identity" Margin="0" VerticalAlignment="Center" />
+            </StackPanel>
             <TextBlock Classes="sub"
                        Text="These four values decide whether Intune upgrades your app or quietly ignores it. MsiMaker manages the ProductCode for you." />
 
             <Border Classes="card">
-              <Grid ColumnDefinitions="176,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              <StackPanel Spacing="14">
+                <TextBlock Classes="eyebrow" Text="THE APPLICATION" Margin="0" />
+                <Grid ColumnDefinitions="168,*" RowDefinitions="Auto,Auto,Auto">
 
-                <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Product name" Margin="0,7,14,0" />
-                <TextBox  Grid.Row="0" Grid.Column="1" Text="{Binding ProductName}" Margin="0,0,0,14" />
+                  <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Product name"
+                             Margin="0,8,14,0" />
+                  <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding ProductName}"
+                           Watermark="as it appears in Programs and Features" Margin="0,0,0,12" />
 
-                <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Manufacturer" Margin="0,7,14,0" />
-                <TextBox  Grid.Row="1" Grid.Column="1" Text="{Binding Manufacturer}" Margin="0,0,0,14" />
+                  <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Manufacturer"
+                             Margin="0,8,14,0" />
+                  <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Manufacturer}"
+                           Watermark="the publisher shown to the fleet" Margin="0,0,0,12" />
 
-                <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="Version" Margin="0,7,14,0" />
-                <StackPanel Grid.Row="2" Grid.Column="1" Margin="0,0,0,14">
-                  <TextBox Text="{Binding Version}" />
-                  <TextBlock Classes="hint" Text="{Binding VersionNote}" />
-                </StackPanel>
+                  <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="Version"
+                             Margin="0,8,14,0" />
+                  <StackPanel Grid.Row="2" Grid.Column="1">
+                    <TextBox Text="{Binding Version}" />
+                    <!--
+                      The one hint that earns its place on screen: it changes as
+                      the box is typed into, and a fourth field silently doing
+                      nothing is exactly what it is there to catch.
+                    -->
+                    <TextBlock Classes="hint" Text="{Binding VersionNote}" />
+                  </StackPanel>
+                </Grid>
+              </StackPanel>
+            </Border>
 
-                <TextBlock Grid.Row="3" Grid.Column="0" Classes="label" Text="UpgradeCode" Margin="0,7,14,0" />
-                <StackPanel Grid.Row="3" Grid.Column="1" Margin="0,0,0,14">
-                  <DockPanel>
+            <Border Classes="card">
+              <StackPanel Spacing="14">
+                <TextBlock Classes="eyebrow" Text="HOW INTUNE RECOGNISES IT" Margin="0" />
+                <Grid ColumnDefinitions="168,*" RowDefinitions="Auto,Auto">
+
+                  <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="6"
+                              Margin="0,8,14,0" VerticalAlignment="Top">
+                    <TextBlock Classes="label" Text="UpgradeCode" Margin="0" />
+                    <Button Classes="info">
+                      <Button.Flyout>
+                        <Flyout>
+                          <TextBlock Classes="disclosure"
+                                     Text="Stable for the lifetime of the product. Every version must carry this same value, or the old build is never removed and you end up with two entries in Programs and Features." />
+                        </Flyout>
+                      </Button.Flyout>
+                    </Button>
+                  </StackPanel>
+                  <DockPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,12">
                     <Button Name="NewUpgradeCodeButton" Content="New" DockPanel.Dock="Right" Margin="8,0,0,0" />
                     <TextBox Text="{Binding UpgradeCode}" Classes="mono" />
                   </DockPanel>
-                  <TextBlock Classes="hint"
-                             Text="Stable for the lifetime of the product. Every version must carry this same value, or the old build is never removed and you end up with two entries in Programs and Features." />
-                </StackPanel>
 
-                <TextBlock Grid.Row="4" Grid.Column="0" Classes="label" Text="ProductCode" Margin="0,7,14,0" />
-                <StackPanel Grid.Row="4" Grid.Column="1" Margin="0,0,0,14">
-                  <TextBox Text="{Binding ProductCodePreview}" IsReadOnly="True" Classes="mono"
+                  <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Spacing="6"
+                              Margin="0,8,14,0" VerticalAlignment="Top">
+                    <TextBlock Classes="label" Text="ProductCode" Margin="0" />
+                    <Button Classes="info">
+                      <Button.Flyout>
+                        <Flyout>
+                          <TextBlock Classes="disclosure"
+                                     Text="Derived from the UpgradeCode and version, so it changes exactly when the version changes. Intune detects on this value; a ProductCode that fails to change is the single most common reason an upgrade never happens." />
+                        </Flyout>
+                      </Button.Flyout>
+                    </Button>
+                  </StackPanel>
+                  <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding ProductCodePreview}"
+                           IsReadOnly="True" Classes="mono"
                            Background="{DynamicResource SunkenBrush}"
                            Foreground="{DynamicResource TextSecondaryBrush}" />
-                  <TextBlock Classes="hint"
-                             Text="Derived from the UpgradeCode and version, so it changes exactly when the version changes. Intune detects on this value; a ProductCode that fails to change is the single most common reason an upgrade never happens." />
-                </StackPanel>
+                </Grid>
+              </StackPanel>
+            </Border>
 
-                <TextBlock Grid.Row="5" Grid.Column="0" Classes="label" Text="Platform" Margin="0,7,14,0" />
-                <StackPanel Grid.Row="5" Grid.Column="1" Margin="0,0,0,14">
-                  <ComboBox ItemsSource="{Binding Platforms}" SelectedItem="{Binding Platform}"
-                            MinWidth="170" HorizontalAlignment="Left" />
-                  <TextBlock Classes="hint"
-                             Text="Cannot change between versions of the same product. Windows Installer will not upgrade across architectures." />
-                </StackPanel>
+            <Border Classes="card">
+              <StackPanel Spacing="14">
+                <TextBlock Classes="eyebrow" Text="WHERE IT LANDS" Margin="0" />
+                <Grid ColumnDefinitions="168,*" RowDefinitions="Auto,Auto">
 
-                <TextBlock Grid.Row="6" Grid.Column="0" Classes="label" Text="Install folder" Margin="0,7,14,0" />
-                <StackPanel Grid.Row="6" Grid.Column="1">
-                  <TextBox Text="{Binding InstallFolder}" Watermark="defaults to the product name" />
-                  <TextBlock Classes="hint" Text="Created under Program Files. Installs are always per-machine, because Intune runs as SYSTEM." />
-                </StackPanel>
-              </Grid>
+                  <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="6"
+                              Margin="0,8,14,0" VerticalAlignment="Top">
+                    <TextBlock Classes="label" Text="Platform" Margin="0" />
+                    <Button Classes="info">
+                      <Button.Flyout>
+                        <Flyout>
+                          <TextBlock Classes="disclosure"
+                                     Text="Cannot change between versions of the same product. Windows Installer will not upgrade across architectures." />
+                        </Flyout>
+                      </Button.Flyout>
+                    </Button>
+                  </StackPanel>
+                  <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding Platforms}"
+                            SelectedItem="{Binding Platform}" MinWidth="170"
+                            HorizontalAlignment="Left" Margin="0,0,0,12" />
+
+                  <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Spacing="6"
+                              Margin="0,8,14,0" VerticalAlignment="Top">
+                    <TextBlock Classes="label" Text="Install folder" Margin="0" />
+                    <Button Classes="info">
+                      <Button.Flyout>
+                        <Flyout>
+                          <TextBlock Classes="disclosure"
+                                     Text="Created under Program Files. Installs are always per-machine, because Intune runs as SYSTEM." />
+                        </Flyout>
+                      </Button.Flyout>
+                    </Button>
+                  </StackPanel>
+                  <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding InstallFolder}"
+                           Watermark="defaults to the product name" />
+                </Grid>
+              </StackPanel>
             </Border>
           </StackPanel>
         </ScrollViewer>
       </TabItem>
 
-      <!-- ============================================ Run -->
-      <TabItem Header="Run">
+      <!-- =================================================== 4. Commands -->
+      <TabItem Header="Commands">
         <ScrollViewer>
-          <StackPanel Margin="{DynamicResource PagePadding}">
-            <TextBlock Classes="h1" Text="Commands to run" />
+          <StackPanel Margin="{DynamicResource PagePadding}"
+                      MaxWidth="{StaticResource PageMeasure}">
+
+            <StackPanel Orientation="Horizontal" Spacing="12">
+              <Border Classes="pageicon">
+                <Path Classes="icon" Data="{StaticResource IconTerminal}" />
+              </Border>
+              <TextBlock Classes="h1" Text="Commands to run" Margin="0" VerticalAlignment="Center" />
+            </StackPanel>
             <TextBlock Classes="sub"
                        Text="Executables the package runs during install or uninstall. Each runs deferred and without impersonation, so it executes as SYSTEM with the payload already on disk." />
 
             <Border Classes="card">
-              <StackPanel Spacing="12">
-                <TextBlock Classes="eyebrow" Text="CUSTOM ACTIONS" Margin="0" />
+              <StackPanel Spacing="16">
+
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                  <Button Name="AddRunButton" Content="Add command" />
-                  <Button Name="RemoveRunButton" Content="Remove selected" Classes="quiet" />
+                  <TextBlock Classes="eyebrow" Text="CUSTOM ACTIONS" Margin="0" VerticalAlignment="Center" />
+                  <Button Classes="info">
+                    <Button.Flyout>
+                      <Flyout>
+                        <TextBlock Classes="disclosure"
+                                   Text="Paths are relative to the install folder. An installer run this way is not tracked by Windows Installer, so uninstalling the MSI removes the payload but not whatever that installer wrote elsewhere - add an uninstall command for that." />
+                      </Flyout>
+                    </Button.Flyout>
+                  </Button>
                 </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Button Name="AddRunButton">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                      <Path Classes="icon" Data="{StaticResource IconPlus}" />
+                      <TextBlock Text="Add command" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </Button>
+                  <Button Name="RemoveRunButton" Classes="quiet">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                      <Path Classes="icon" Data="{StaticResource IconTrash}" />
+                      <TextBlock Text="Remove selected" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </Button>
+                </StackPanel>
+
                 <DataGrid Name="RunGrid" ItemsSource="{Binding Run}" MinHeight="150" MaxHeight="280"
                           AutoGenerateColumns="False">
                   <DataGrid.Columns>
@@ -424,46 +721,66 @@
                     <DataGridCheckBoxColumn Header="Ignore exit code" Binding="{Binding IgnoreExitCode}" Width="140" />
                   </DataGrid.Columns>
                 </DataGrid>
-                <TextBlock Classes="hint" Margin="0"
-                           Text="Paths are relative to the install folder. An installer run this way is not tracked by Windows Installer, so uninstalling the MSI removes the payload but not whatever that installer wrote elsewhere - add an uninstall command for that." />
               </StackPanel>
             </Border>
           </StackPanel>
         </ScrollViewer>
       </TabItem>
 
-      <!-- ============================================ Upgrade check -->
+      <!-- ============================================== 5. Upgrade check -->
       <TabItem Header="Upgrade check">
         <ScrollViewer>
-          <StackPanel Margin="{DynamicResource PagePadding}">
-            <TextBlock Classes="h1" Text="Will Intune actually upgrade?" />
+          <StackPanel Margin="{DynamicResource PagePadding}"
+                      MaxWidth="{StaticResource PageMeasure}">
+
+            <StackPanel Orientation="Horizontal" Spacing="12">
+              <Border Classes="pageicon">
+                <Path Classes="icon" Data="{StaticResource IconCheckCircle}" />
+              </Border>
+              <TextBlock Classes="h1" Text="Will Intune actually upgrade?" Margin="0" VerticalAlignment="Center" />
+            </StackPanel>
             <TextBlock Classes="sub"
                        Text="Compare a built package against the version already deployed. Every reason an Intune upgrade silently fails is visible in the two files before anything is deployed." />
 
             <Border Classes="card">
-              <StackPanel Spacing="12">
+              <StackPanel Spacing="16">
                 <TextBlock Classes="eyebrow" Text="COMPARE AGAINST" Margin="0" />
+
                 <DockPanel>
                   <Button Name="PickPreviousButton" Content="Previously shipped MSI…"
                           DockPanel.Dock="Right" Margin="8,0,0,0" />
                   <TextBox Text="{Binding PreviousMsi}" Watermark="path to the MSI currently deployed" />
                 </DockPanel>
+
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                  <Button Name="RunCheckButton" Content="Check against current build" />
+                  <Button Name="RunCheckButton">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                      <Path Classes="icon" Data="{StaticResource IconCheckCircle}" />
+                      <TextBlock Text="Check against current build" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </Button>
                   <Button Name="PickCandidateButton" Content="…or pick a candidate MSI" Classes="quiet" />
                 </StackPanel>
 
                 <Border Classes="verdict" Classes.pass="{Binding VerdictIsGood}"
                         IsVisible="{Binding Verdict, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-                  <TextBlock Classes="verdicttext" Classes.pass="{Binding VerdictIsGood}"
-                             Text="{Binding Verdict}" />
+                  <Grid ColumnDefinitions="Auto,*">
+                    <Path Grid.Column="0" Classes="icon" Margin="0,1,11,0"
+                          Data="{StaticResource IconCheckCircle}"
+                          IsVisible="{Binding VerdictIsGood}" />
+                    <Path Grid.Column="0" Classes="icon" Margin="0,1,11,0"
+                          Data="{StaticResource IconAlert}"
+                          IsVisible="{Binding !VerdictIsGood}" />
+                    <TextBlock Grid.Column="1" Classes="verdicttext" Classes.pass="{Binding VerdictIsGood}"
+                               Text="{Binding Verdict}" />
+                  </Grid>
                 </Border>
 
                 <DataGrid ItemsSource="{Binding Checks}" MinHeight="150" MaxHeight="300" IsReadOnly="True"
                           AutoGenerateColumns="False" RowHeight="34"
                           IsVisible="{Binding HasChecks}">
                   <DataGrid.Columns>
-                    <DataGridTemplateColumn Header="Status" Width="86">
+                    <DataGridTemplateColumn Header="Status" Width="92">
                       <DataGridTemplateColumn.CellTemplate>
                         <!--
                           A template column, not a text column: compiled bindings
@@ -475,7 +792,7 @@
                                   Classes.pass="{Binding IsPass}"
                                   Classes.warn="{Binding IsWarn}"
                                   Classes.fail="{Binding IsFail}"
-                                  MinWidth="48" Margin="12,0,0,0">
+                                  MinWidth="52" Margin="12,0,0,0">
                             <TextBlock Classes="pilltext"
                                        Classes.pass="{Binding IsPass}"
                                        Classes.warn="{Binding IsWarn}"
@@ -499,8 +816,11 @@
                   </DataGrid.Columns>
                 </DataGrid>
 
-                <Border Classes="empty" IsVisible="{Binding !HasChecks}" MinHeight="140" MaxHeight="220">
+                <Border Classes="empty" IsVisible="{Binding !HasChecks}" MinHeight="150" MaxHeight="230">
                   <StackPanel Spacing="6" VerticalAlignment="Center">
+                    <Viewbox Classes="mark">
+                      <Path Classes="icon mark" Data="{StaticResource IconCompare}" />
+                    </Viewbox>
                     <TextBlock Classes="empty" FontWeight="SemiBold" Text="Nothing compared yet" />
                     <TextBlock Classes="empty"
                                Text="Point at the MSI currently deployed, then check it against this build. Each rule Windows Installer applies to an upgrade is reported as PASS, WARN or FAIL." />
@@ -512,57 +832,78 @@
         </ScrollViewer>
       </TabItem>
 
-      <!-- ============================================ Build -->
+      <!-- ====================================================== 6. Build -->
+      <!--
+        The build action itself lives in the wizard footer, because that is
+        where the primary action of every other step lives too and this is
+        simply the last of them.
+      -->
       <TabItem Header="Build">
-        <DockPanel Margin="{DynamicResource PagePadding}">
+        <ScrollViewer>
+          <StackPanel Margin="{DynamicResource PagePadding}"
+                      MaxWidth="{StaticResource PageMeasure}">
 
-          <!--
-            The one action the window exists for, docked rather than scrolled:
-            the options above it are long and every hint on them is load-bearing,
-            so on a short screen the button would otherwise be below the fold.
-          -->
-          <Border DockPanel.Dock="Bottom" Classes="card" Margin="0,12,0,0" Padding="14,12">
-            <StackPanel Orientation="Horizontal" Spacing="10">
-              <Button Name="BuildButton" Content="Build MSI" Classes="primary"
-                      IsEnabled="{Binding CanBuild}" />
-              <Button Name="OpenOutputButton" Content="Show output folder" Classes="quiet" />
+            <StackPanel Orientation="Horizontal" Spacing="12">
+              <Border Classes="pageicon">
+                <Path Classes="icon" Data="{StaticResource IconBuild}" />
+              </Border>
+              <TextBlock Classes="h1" Text="Build" Margin="0" VerticalAlignment="Center" />
             </StackPanel>
-          </Border>
-
-          <ScrollViewer>
-          <StackPanel>
-            <TextBlock Classes="h1" Text="Build" />
             <TextBlock Classes="sub" Text="The MSI is always produced. Everything else is optional." />
 
             <Border Classes="card">
-              <StackPanel Spacing="12">
+              <StackPanel Spacing="16">
                 <TextBlock Classes="eyebrow" Text="OUTPUT" Margin="0" />
+
                 <DockPanel>
+                  <Button Name="OpenOutputButton" Classes="quiet" DockPanel.Dock="Right" Margin="8,0,0,0">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                      <Path Classes="icon" Data="{StaticResource IconFolder}" />
+                      <TextBlock Text="Show folder" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </Button>
                   <Button Name="PickOutputButton" Content="Output…" DockPanel.Dock="Right" Margin="8,0,0,0" />
                   <TextBox Text="{Binding OutputPath}" Watermark="where to write the .msi" />
                 </DockPanel>
 
-                <StackPanel Spacing="0">
-                  <CheckBox IsChecked="{Binding EmitIntuneWin}" Content="Also produce a Win32 .intunewin package" />
-                  <TextBlock Classes="hint" Margin="28,2,0,6"
-                             Text="Not needed just to deploy an MSI: Intune reads the ProductCode itself and a line-of-business MSI upgrades on GUID and version alone. Choose this when you need something LOB MSI cannot do - supersedence, dependencies, requirement rules, a custom command line, or detection beyond the ProductCode." />
-                  <TextBlock Classes="hint" Margin="28,0,0,0" FontWeight="SemiBold"
-                             Foreground="{DynamicResource TextSecondaryBrush}"
-                             Text="Required for ring-based rollout: Intune deployment plans accept only Windows app (Win32) and Enterprise App Catalog payloads. A line-of-business MSI cannot be used in a deployment, and only the Required install intent is supported." />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <CheckBox IsChecked="{Binding EmitIntuneWin}"
+                            Content="Also produce a Win32 .intunewin package" />
+                  <Button Classes="info">
+                    <Button.Flyout>
+                      <Flyout>
+                        <StackPanel Spacing="10">
+                          <TextBlock Classes="disclosure"
+                                     Text="Not needed just to deploy an MSI: Intune reads the ProductCode itself and a line-of-business MSI upgrades on GUID and version alone. Choose this when you need something LOB MSI cannot do - supersedence, dependencies, requirement rules, a custom command line, or detection beyond the ProductCode." />
+                          <TextBlock Classes="disclosure" FontWeight="SemiBold"
+                                     Foreground="{DynamicResource TextPrimaryBrush}"
+                                     Text="Required for ring-based rollout: Intune deployment plans accept only Windows app (Win32) and Enterprise App Catalog payloads. A line-of-business MSI cannot be used in a deployment, and only the Required install intent is supported." />
+                        </StackPanel>
+                      </Flyout>
+                    </Button.Flyout>
+                  </Button>
                 </StackPanel>
+              </StackPanel>
+            </Border>
 
-                <Separator Margin="0,6" />
-
-                <!-- ========================================= signing -->
+            <!-- ========================================= signing -->
+            <Border Classes="card">
+              <StackPanel Spacing="16">
                 <TextBlock Classes="eyebrow" Text="SIGNING" Margin="0" />
 
-                <StackPanel Spacing="0">
+                <StackPanel Orientation="Horizontal" Spacing="8">
                   <CheckBox IsChecked="{Binding SignEnabled}" Content="Sign the package" />
-                  <TextBlock Classes="hint" Margin="28,2,0,0"
-                             Text="Signing runs after the MSI is written and before anything is packaged around it, because any later edit to the database invalidates the signature." />
+                  <Button Classes="info">
+                    <Button.Flyout>
+                      <Flyout>
+                        <TextBlock Classes="disclosure"
+                                   Text="Signing runs after the MSI is written and before anything is packaged around it, because any later edit to the database invalidates the signature." />
+                      </Flyout>
+                    </Button.Flyout>
+                  </Button>
                 </StackPanel>
 
-                <StackPanel Spacing="14" Margin="28,6,0,0" IsVisible="{Binding SignEnabled}">
+                <StackPanel Spacing="16" Margin="28,0,0,0" IsVisible="{Binding SignEnabled}">
 
                   <!--
                     Availability first. Every mode drives an external signer, so
@@ -581,7 +922,12 @@
                                      Text="{Binding SignerBadge}" />
                         </Border>
                         <TextBlock Text="Signer" Classes="label" Margin="0" VerticalAlignment="Center" />
-                        <Button Name="RecheckSignerButton" Content="Check again" Classes="quiet" />
+                        <Button Name="RecheckSignerButton" Classes="quiet">
+                          <StackPanel Orientation="Horizontal" Spacing="7">
+                            <Path Classes="icon" Data="{StaticResource IconSearch}" />
+                            <TextBlock Text="Check again" VerticalAlignment="Center" />
+                          </StackPanel>
+                        </Button>
                       </StackPanel>
                       <TextBlock Classes="mono" Text="{Binding SignerStatus}" />
                     </StackPanel>
@@ -595,62 +941,88 @@
                   </StackPanel>
 
                   <!-- PFX file -->
-                  <StackPanel Spacing="14" IsVisible="{Binding IsPfxMode}">
-                    <StackPanel Spacing="4">
-                      <TextBlock Classes="label" Text="Certificate file (.pfx)" Margin="0" />
-                      <DockPanel>
-                        <Button Name="PickCertificateButton" Content="Certificate…"
-                                DockPanel.Dock="Right" Margin="8,0,0,0" />
-                        <TextBox Text="{Binding CertificatePath}"
-                                 Watermark="path to the PFX to sign with" />
-                      </DockPanel>
-                    </StackPanel>
+                  <StackPanel Spacing="16" IsVisible="{Binding IsPfxMode}">
+                    <DockPanel>
+                      <Button Name="PickCertificateButton" Content="Certificate…"
+                              DockPanel.Dock="Right" Margin="8,0,0,0" />
+                      <TextBox Text="{Binding CertificatePath}"
+                               Watermark="path to the PFX to sign with" />
+                    </DockPanel>
 
                     <StackPanel Spacing="4">
                       <!--
                         The single most dangerous field in the window. It is
                         named for what it takes - a variable name - in the label,
-                        the watermark and the hint, because a password typed here
-                        would be written into the project file and committed.
+                        the watermark and the disclosure, because a password
+                        typed here would be written into the project file and
+                        committed.
                       -->
-                      <TextBlock Classes="label" Margin="0"
-                                 Text="Name of the environment variable holding the password" />
+                      <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Classes="label" Margin="0"
+                                   Text="Name of the environment variable holding the password" />
+                        <Button Classes="info">
+                          <Button.Flyout>
+                            <Flyout>
+                              <TextBlock Classes="disclosure"
+                                         Text="This is a variable name, not the password. MsiMaker reads the password from that variable on the machine doing the build, and never stores it. A project file belongs in source control, and a secret written into one would go to source control with it - which is why there is no password box here and no password field in the project format." />
+                            </Flyout>
+                          </Button.Flyout>
+                        </Button>
+                      </StackPanel>
                       <TextBox Text="{Binding PasswordEnvironmentVariable}" Classes="mono"
                                Watermark="for example MSIMAKER_PFX_PASSWORD" />
-                      <TextBlock Classes="hint" Margin="0"
-                                 Text="This is a variable name, not the password. MsiMaker reads the password from that variable on the machine doing the build, and never stores it. A project file belongs in source control, and a secret written into one would go to source control with it - which is why there is no password box here and no password field in the project format." />
                     </StackPanel>
                   </StackPanel>
 
                   <!-- Windows certificate store -->
                   <StackPanel Spacing="4" IsVisible="{Binding IsStoreMode}">
-                    <TextBlock Classes="label" Text="Certificate thumbprint" Margin="0" />
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                      <TextBlock Classes="label" Text="Certificate thumbprint" Margin="0" />
+                      <Button Classes="info">
+                        <Button.Flyout>
+                          <Flyout>
+                            <TextBlock Classes="disclosure"
+                                       Text="The certificate must already be installed on the machine doing the build, in a store the build account can read. Nothing secret is stored in the project: only the thumbprint that selects it." />
+                          </Flyout>
+                        </Button.Flyout>
+                      </Button>
+                    </StackPanel>
                     <TextBox Text="{Binding Thumbprint}" Classes="mono"
                              Watermark="SHA-1 thumbprint of a certificate in the Windows store" />
-                    <TextBlock Classes="hint" Margin="0"
-                               Text="The certificate must already be installed on the machine doing the build, in a store the build account can read. Nothing secret is stored in the project: only the thumbprint that selects it." />
                   </StackPanel>
 
                   <!-- Azure Trusted Signing -->
-                  <StackPanel Spacing="14" IsVisible="{Binding IsAzureMode}">
+                  <StackPanel Spacing="16" IsVisible="{Binding IsAzureMode}">
 
                     <Border Classes="verdict warn">
-                      <StackPanel Spacing="5">
-                        <TextBlock Classes="verdicttext warn"
-                                   Text="Implemented, but never verified against a real account." />
-                        <TextBlock Classes="verdicttext warn" FontWeight="Normal" FontSize="12.5"
-                                   Text="The command line signtool is given is covered by tests, but no package has been signed through an actual Trusted Signing account from here. Treat the first run as something to prove on one package, not as a step in a fleet build." />
-                        <TextBlock Classes="verdicttext warn" FontWeight="Normal" FontSize="12.5"
-                                   Text="Credentials are not project settings and cannot be entered here. They come from the ambient Azure credential chain - AZURE_TENANT_ID, AZURE_CLIENT_ID and AZURE_CLIENT_SECRET, or an interactive az login - so the private key never reaches the build machine at all." />
-                      </StackPanel>
+                      <Grid ColumnDefinitions="Auto,*">
+                        <Path Grid.Column="0" Classes="icon" Data="{StaticResource IconAlert}"
+                              Margin="0,1,11,0" />
+                        <StackPanel Grid.Column="1" Spacing="5">
+                          <TextBlock Classes="verdicttext warn"
+                                     Text="Implemented, but never verified against a real account." />
+                          <TextBlock Classes="verdicttext warn" FontWeight="Normal" FontSize="12.5"
+                                     Text="The command line signtool is given is covered by tests, but no package has been signed through an actual Trusted Signing account from here. Treat the first run as something to prove on one package, not as a step in a fleet build." />
+                          <TextBlock Classes="verdicttext warn" FontWeight="Normal" FontSize="12.5"
+                                     Text="Credentials are not project settings and cannot be entered here. They come from the ambient Azure credential chain - AZURE_TENANT_ID, AZURE_CLIENT_ID and AZURE_CLIENT_SECRET, or an interactive az login - so the private key never reaches the build machine at all." />
+                        </StackPanel>
+                      </Grid>
                     </Border>
 
                     <StackPanel Spacing="4">
-                      <TextBlock Classes="label" Text="Account endpoint" Margin="0" />
+                      <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Classes="label" Text="Account endpoint" Margin="0" />
+                        <Button Classes="info">
+                          <Button.Flyout>
+                            <Flyout>
+                              <TextBlock Classes="disclosure"
+                                         Text="The region in the host must match the region the Trusted Signing account was created in." />
+                            </Flyout>
+                          </Button.Flyout>
+                        </Button>
+                      </StackPanel>
                       <TextBox Text="{Binding AzureEndpoint}" Classes="mono"
                                Watermark="https://eus.codesigning.azure.net/" />
-                      <TextBlock Classes="hint" Margin="0"
-                                 Text="The region in the host must match the region the Trusted Signing account was created in." />
                     </StackPanel>
 
                     <StackPanel Spacing="4">
@@ -659,31 +1031,55 @@
                     </StackPanel>
 
                     <StackPanel Spacing="4">
-                      <TextBlock Classes="label" Text="Certificate profile name" Margin="0" />
+                      <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Classes="label" Text="Certificate profile name" Margin="0" />
+                        <Button Classes="info">
+                          <Button.Flyout>
+                            <Flyout>
+                              <TextBlock Classes="disclosure"
+                                         Text="The profile, not the project, decides which identity the signature carries." />
+                            </Flyout>
+                          </Button.Flyout>
+                        </Button>
+                      </StackPanel>
                       <TextBox Text="{Binding AzureCertificateProfileName}" />
-                      <TextBlock Classes="hint" Margin="0"
-                                 Text="The profile, not the project, decides which identity the signature carries." />
                     </StackPanel>
 
                     <StackPanel Spacing="4">
-                      <TextBlock Classes="label" Text="Dlib path (optional)" Margin="0" />
+                      <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Classes="label" Text="Dlib path (optional)" Margin="0" />
+                        <Button Classes="info">
+                          <Button.Flyout>
+                            <Flyout>
+                              <TextBlock Classes="disclosure"
+                                         Text="Only needed when the Microsoft.Trusted.Signing.Client package sits somewhere the NuGet cache sweep will not look. Signing goes through signtool's dlib hook, so this mode needs the Windows SDK; osslsigncode cannot do it." />
+                            </Flyout>
+                          </Button.Flyout>
+                        </Button>
+                      </StackPanel>
                       <DockPanel>
                         <Button Name="PickDlibButton" Content="Dlib…"
                                 DockPanel.Dock="Right" Margin="8,0,0,0" />
                         <TextBox Text="{Binding AzureDlibPath}" Classes="mono"
                                  Watermark="leave empty to find Azure.CodeSigning.Dlib.dll in the NuGet cache" />
                       </DockPanel>
-                      <TextBlock Classes="hint" Margin="0"
-                                 Text="Only needed when the Microsoft.Trusted.Signing.Client package sits somewhere the NuGet cache sweep will not look. Signing goes through signtool's dlib hook, so this mode needs the Windows SDK; osslsigncode cannot do it." />
                     </StackPanel>
                   </StackPanel>
 
                   <StackPanel Spacing="4">
-                    <TextBlock Classes="label" Text="Timestamp URL" Margin="0" />
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                      <TextBlock Classes="label" Text="Timestamp URL" Margin="0" />
+                      <Button Classes="info">
+                        <Button.Flyout>
+                          <Flyout>
+                            <TextBlock Classes="disclosure"
+                                       Text="Without a timestamp the signature stops being trusted the day the certificate expires, rather than covering everything signed while it was valid." />
+                          </Flyout>
+                        </Button.Flyout>
+                      </Button>
+                    </StackPanel>
                     <TextBox Text="{Binding TimestampUrl}" Classes="mono"
                              Watermark="http://timestamp.digicert.com" />
-                    <TextBlock Classes="hint" Margin="0"
-                               Text="Without a timestamp the signature stops being trusted the day the certificate expires, rather than covering everything signed while it was valid." />
                   </StackPanel>
 
                 </StackPanel>
@@ -697,7 +1093,7 @@
               and it has nothing in it until a build has run anyway.
             -->
             <Expander Name="LogExpander" Header="Log" IsExpanded="False"
-                      HorizontalAlignment="Stretch" Margin="0,0,0,16">
+                      HorizontalAlignment="Stretch" Margin="0,0,0,8">
               <TextBox Text="{Binding Log}" IsReadOnly="True" AcceptsReturn="True"
                        Classes="mono" MinHeight="110" MaxHeight="220"
                        Background="{DynamicResource SunkenBrush}"
@@ -705,8 +1101,7 @@
                        HorizontalAlignment="Stretch" VerticalContentAlignment="Top" />
             </Expander>
           </StackPanel>
-          </ScrollViewer>
-        </DockPanel>
+        </ScrollViewer>
       </TabItem>
 
     </TabControl>

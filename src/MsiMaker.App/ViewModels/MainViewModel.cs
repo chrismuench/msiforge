@@ -154,6 +154,34 @@ public sealed class RecipeRow(Recipe recipe)
         : "Built into MsiMaker.";
 }
 
+/// <summary>
+/// One stop on the wizard's route. It knows nothing about the project; it only
+/// carries the three facts the indicator has to show - where you are, what you
+/// have already finished, and whether this one can simply be walked past.
+/// </summary>
+public sealed class WizardStep(int number, string name, bool optional) : ObservableObject
+{
+    public string NumberText { get; } = number.ToString();
+    public string Name { get; } = name;
+    public bool IsOptional { get; } = optional;
+
+    private bool _isCurrent;
+    public bool IsCurrent { get => _isCurrent; set => Set(ref _isCurrent, value); }
+
+    private bool _isDone;
+    public bool IsDone
+    {
+        get => _isDone;
+        set { if (Set(ref _isDone, value)) { Raise(nameof(ShowsNumber)); Raise(nameof(ShowsOptional)); } }
+    }
+
+    /// <summary>The tick replaces the number, so the strip reads as progress.</summary>
+    public bool ShowsNumber => !_isDone;
+
+    /// <summary>Saying "optional" about something already done is just noise.</summary>
+    public bool ShowsOptional => IsOptional && !_isDone;
+}
+
 public sealed class MainViewModel : ObservableObject
 {
     private MsiProject _project = new() { UpgradeCode = Guid.NewGuid() };
@@ -173,6 +201,108 @@ public sealed class MainViewModel : ObservableObject
         _library = RecipeLibrary.Load();
         foreach (var recipe in _library.List()) Recipes.Add(new RecipeRow(recipe));
         SelectedRecipe = Recipes.FirstOrDefault();
+
+        RefreshWizard();
+    }
+
+    // -------------------------------------------------------------- wizard
+
+    /// <summary>
+    /// The suggested route through the window. Two of the six are genuinely
+    /// optional and are labelled as such, because a step that looks mandatory
+    /// and has nothing to say is how a wizard starts feeling like a cage.
+    /// </summary>
+    public ObservableCollection<WizardStep> Steps { get; } =
+    [
+        new(1, "Start", false),
+        new(2, "Payload", false),
+        new(3, "Identity", false),
+        new(4, "Commands", true),
+        new(5, "Upgrade check", true),
+        new(6, "Build", false),
+    ];
+
+    private int _currentStep;
+
+    /// <summary>
+    /// Drives the TabControl and the indicator from one place, in both
+    /// directions: the footer moves it, and so does clicking a step.
+    /// </summary>
+    public int CurrentStep
+    {
+        get => _currentStep;
+        set { if (Set(ref _currentStep, value)) RefreshWizard(); }
+    }
+
+    public bool IsFirstStep => _currentStep <= 0;
+    public bool IsLastStep => _currentStep >= Steps.Count - 1;
+
+    public string PositionLabel => $"Step {_currentStep + 1} of {Steps.Count}";
+
+    /// <summary>
+    /// Names the destination rather than saying "Next", which is the entire
+    /// point of the footer: you should never have to guess what comes after.
+    /// </summary>
+    public string NextLabel =>
+        IsLastStep ? "Build MSI" : $"Next: {Steps[_currentStep + 1].Name}";
+
+    /// <summary>
+    /// Empty when the step is finished enough to move on. Gating is only ever
+    /// about things the next step cannot work without.
+    /// </summary>
+    public string StepBlockReason => _currentStep switch
+    {
+        1 when Files.Count == 0 => "Add at least one file to continue.",
+        2 when string.IsNullOrWhiteSpace(ProductName) => "A product name is needed to continue.",
+        2 when string.IsNullOrWhiteSpace(Manufacturer) => "A manufacturer is needed to continue.",
+        _ => "",
+    };
+
+    public bool CanAdvance => StepBlockReason.Length == 0;
+    public bool IsBlocked => StepBlockReason.Length > 0;
+
+    private bool _builtOnce;
+
+    /// <summary>Ticks the last step once a build has actually produced something.</summary>
+    public void MarkBuilt()
+    {
+        _builtOnce = true;
+        RefreshWizard();
+    }
+
+    private bool StepIsDone(int index) => index switch
+    {
+        // "Start" is satisfied by any route out of it - a recipe, an opened
+        // project, or simply typing a name after starting blank.
+        0 => Files.Count > 0 || !string.IsNullOrWhiteSpace(ProductName),
+        1 => Files.Count > 0,
+        2 => !string.IsNullOrWhiteSpace(ProductName) && !string.IsNullOrWhiteSpace(Manufacturer),
+        3 => Run.Count > 0,
+        4 => HasChecks,
+        5 => _builtOnce,
+        _ => false,
+    };
+
+    /// <summary>
+    /// Recomputed rather than observed: the inputs are spread over the project,
+    /// three collections and the current position, and a handful of assignments
+    /// on every change is cheaper than wiring each of them up separately.
+    /// </summary>
+    public void RefreshWizard()
+    {
+        for (int i = 0; i < Steps.Count; i++)
+        {
+            Steps[i].IsCurrent = i == _currentStep;
+            Steps[i].IsDone = StepIsDone(i);
+        }
+
+        Raise(nameof(IsFirstStep));
+        Raise(nameof(IsLastStep));
+        Raise(nameof(PositionLabel));
+        Raise(nameof(NextLabel));
+        Raise(nameof(StepBlockReason));
+        Raise(nameof(CanAdvance));
+        Raise(nameof(IsBlocked));
     }
 
     // ------------------------------------------------------------- library
@@ -208,13 +338,13 @@ public sealed class MainViewModel : ObservableObject
     public string ProductName
     {
         get => _project.ProductName;
-        set { _project.ProductName = value; Raise(); Raise(nameof(CanBuild)); }
+        set { _project.ProductName = value; Raise(); Raise(nameof(CanBuild)); RefreshWizard(); }
     }
 
     public string Manufacturer
     {
         get => _project.Manufacturer;
-        set { _project.Manufacturer = value; Raise(); Raise(nameof(CanBuild)); }
+        set { _project.Manufacturer = value; Raise(); Raise(nameof(CanBuild)); RefreshWizard(); }
     }
 
     public string Version
@@ -464,6 +594,7 @@ public sealed class MainViewModel : ObservableObject
         Files.Add(new FileRow(file));
         Raise(nameof(CanBuild));
         Raise(nameof(HasFiles));
+        RefreshWizard();
     }
 
     public void RemoveFile(FileRow row)
@@ -472,6 +603,7 @@ public sealed class MainViewModel : ObservableObject
         Files.Remove(row);
         Raise(nameof(CanBuild));
         Raise(nameof(HasFiles));
+        RefreshWizard();
     }
 
     /// <summary>
@@ -533,12 +665,14 @@ public sealed class MainViewModel : ObservableObject
     {
         _project.Run.Add(action);
         Run.Add(new RunRow(action));
+        RefreshWizard();
     }
 
     public void RemoveRun(RunRow row)
     {
         _project.Run.Remove(row.Model);
         Run.Remove(row);
+        RefreshWizard();
     }
 
     // -------------------------------------------------------- upgrade check
@@ -563,6 +697,7 @@ public sealed class MainViewModel : ObservableObject
         Verdict = report.Summary;
         VerdictIsGood = report.Verdict == UpgradeVerdict.UpgradesInPlace;
         Raise(nameof(HasChecks));
+        RefreshWizard();
     }
 
     // --------------------------------------------------------------- build
@@ -600,5 +735,7 @@ public sealed class MainViewModel : ObservableObject
             nameof(Thumbprint), nameof(AzureEndpoint), nameof(AzureCodeSigningAccountName),
             nameof(AzureCertificateProfileName), nameof(AzureDlibPath), nameof(TimestampUrl),
         }) Raise(name);
+
+        RefreshWizard();
     }
 }

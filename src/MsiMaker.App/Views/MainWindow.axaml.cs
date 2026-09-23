@@ -63,6 +63,18 @@ public partial class MainWindow : Window
         Find<Button>("PickCertificateButton").Click += OnPickCertificate;
         Find<Button>("PickDlibButton").Click += OnPickDlib;
         Find<Button>("RecheckSignerButton").Click += OnRecheckSigner;
+
+        // The wizard footer. Both buttons only ever move the one index the
+        // indicator and the TabControl are both bound to, so the step strip,
+        // the page and the footer can never disagree about where you are.
+        Find<Button>("WizardBackButton").Click += (_, _) =>
+        {
+            if (_model.CurrentStep > 0) _model.CurrentStep--;
+        };
+        Find<Button>("WizardNextButton").Click += (_, _) =>
+        {
+            if (_model.CurrentStep < _model.Steps.Count - 1) _model.CurrentStep++;
+        };
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
@@ -146,7 +158,7 @@ public partial class MainWindow : Window
     private const int PayloadTab = 1;
     private const int IdentityTab = 2;
 
-    private void ShowTab(int index) => Find<TabControl>("MainTabs").SelectedIndex = index;
+    private void ShowTab(int index) => _model.CurrentStep = index;
 
     /// <summary>
     /// Turns a recipe into the current project.
@@ -451,6 +463,7 @@ public partial class MainWindow : Window
         {
             var result = _model.Build(output);
             _lastBuiltMsi = result.MsiPath;
+            _model.MarkBuilt();
 
             _model.Append($"built {result.MsiPath}");
             _model.Append($"  ProductVersion {result.Version}");
