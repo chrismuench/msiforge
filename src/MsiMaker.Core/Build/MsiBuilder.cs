@@ -266,14 +266,18 @@ public static class MsiBuilder
                 continue;
             }
 
-            // The install directory is a token here, not "[#fileId]": MSI formats
-            // its own fields but never the contents of a file, so a formatted
-            // expression written into the XML would reach the device verbatim.
+            // Task Scheduler expands environment variables in Command and
+            // WorkingDirectory, so the install path goes straight into the XML.
+            // That removes any need to rewrite the file on the device, and with
+            // it the PowerShell registrar - which matters because PowerShell is
+            // the thing most often restricted by AppLocker, WDAC or Constrained
+            // Language Mode on a managed endpoint.
             string windowsRelative = exeTarget.Replace('/', '\\');
+            string installDirectory = TargetInstallDirectory(project, is64);
             string xml = TaskXml.Build(task,
-                TaskXml.InstallDirToken + "\\" + windowsRelative,
+                installDirectory + "\\" + windowsRelative,
                 task.Arguments,
-                TaskXml.InstallDirToken);
+                installDirectory);
             byte[] xmlBytes = TaskXml.Encode(xml);
 
             sequence++;
@@ -296,48 +300,17 @@ public static class MsiBuilder
             taskFiles.Add((task, taskFileId));
         }
 
-        // One registrar script serves every task in the package.
-        string? registrarFileId = null;
-        if (taskFiles.Count > 0)
-        {
-            byte[] scriptBytes = new UTF8Encoding(false).GetBytes(TaskXml.RegistrarScript);
-            sequence++;
-            registrarFileId = UniqueId("f_msimaker_register_task.ps1", identifiers);
-            string scriptComponentId = UniqueId("c_msimaker_register_task", componentIds);
-            Guid scriptGuid = DeterministicGuid.Create(project.UpgradeCode, "Component/task-registrar");
-
-            component.Add(scriptComponentId, DeterministicGuid.Format(scriptGuid), "INSTALLFOLDER",
-                          componentAttributes, null, registrarFileId);
-            featureComponents.Add("MainFeature", scriptComponentId);
-            file.Add(registrarFileId, scriptComponentId, "MsiMaker-RegisterTask.ps1",
-                     scriptBytes.Length, null, null, FileVital, sequence);
-
-            byte[] scriptMd5 = MD5.HashData(scriptBytes);
-            fileHash.Add(registrarFileId, 0,
-                BitConverter.ToInt32(scriptMd5, 0), BitConverter.ToInt32(scriptMd5, 4),
-                BitConverter.ToInt32(scriptMd5, 8), BitConverter.ToInt32(scriptMd5, 12));
-            cabFiles.Add(new CabFile(registrarFileId, scriptBytes, DateTime.Now));
-        }
-
         // SystemFolder is the 32-bit system directory (SysWOW64 on x64); the
         // native one is System64Folder. Added on demand, since a package with no
         // tasks and no shell commands has no use for it.
         string systemDirId = is64 ? "System64Folder" : "SystemFolder";
-        string powershellDirId = "d_powershell_v1_0";
 
         void EnsureSystemDirectory()
         {
             if (identifiers.Add(systemDirId)) directory.Add(systemDirId, "TARGETDIR", ".");
         }
 
-        if (taskFiles.Count > 0)
-        {
-            EnsureSystemDirectory();
-            if (identifiers.Add("d_windowspowershell"))
-                directory.Add("d_windowspowershell", systemDirId, "WindowsPowerShell");
-            if (identifiers.Add(powershellDirId))
-                directory.Add(powershellDirId, "d_windowspowershell", "v1.0");
-        }
+        if (taskFiles.Count > 0) EnsureSystemDirectory();
 
         // -------------------------------------------------------- run actions
         var installSequence = db.Std("InstallExecuteSequence");
@@ -525,15 +498,8 @@ public static class MsiBuilder
                 string create = UniqueId($"ca_task_create_{task.Name}", identifiers);
                 customAction.Add(create,
                     CaExeInDirectory | CaDeferred | CaNoImpersonate,
-                    powershellDirId,
-                    "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass "
-                    + $"-File \"[#{registrarFileId}]\" "
-                    + $"-Xml \"[#{taskFileId}]\" "
-                    // A directory property ends in a backslash, and "...\\" would
-                    // escape the closing quote. The trailing dot keeps the argument
-                    // well formed and still names the same directory.
-                    + "-InstallDir \"[INSTALLFOLDER].\" "
-                    + $"-TaskName \"{task.FullName}\"",
+                    systemDirId,
+                    $"schtasks.exe /Create /TN \"{task.FullName}\" /XML \"[#{taskFileId}]\" /F",
                     null);
                 installSequence.Add(create, "NOT REMOVE", createSlot);
                 createSlot += 10;
@@ -603,6 +569,29 @@ public static class MsiBuilder
         // A file whose version resource reads 0.0.0.0 is effectively unversioned.
         var parts = version.Split('.');
         return parts.All(p => int.TryParse(p, out int v) && v == 0) ? null : version;
+    }
+
+    /// <summary>
+    /// The install directory as the target machine will see it, written with the
+    /// environment variables Task Scheduler expands. Resolving it on the build
+    /// machine would bake in this machine's drive layout instead of the one the
+    /// package lands on.
+    /// </summary>
+    private static string TargetInstallDirectory(MsiProject project, bool is64)
+    {
+        string root = project.Root switch
+        {
+            InstallRoot.ProgramFiles => is64 ? "%ProgramFiles%" : "%ProgramFiles(x86)%",
+            InstallRoot.ProgramFilesX86 => "%ProgramFiles(x86)%",
+            InstallRoot.CommonAppData => "%ProgramData%",
+            InstallRoot.Windows => "%SystemRoot%",
+            _ => "%ProgramFiles%",
+        };
+
+        var parts = new List<string> { root };
+        if (!string.IsNullOrWhiteSpace(project.ManufacturerFolder)) parts.Add(project.ManufacturerFolder!);
+        parts.Add(project.EffectiveInstallFolder);
+        return string.Join("\\", parts);
     }
 
     private static string? Combine(string? custom, string standard) =>

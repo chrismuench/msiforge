@@ -264,6 +264,11 @@ public sealed class MsiProject
         foreach (var folder in Folders)
             if (!Path.IsPathRooted(folder.SourceDir))
                 folder.SourceDir = Path.GetFullPath(Path.Combine(baseDir, folder.SourceDir));
+
+        // The signing certificate is a project-relative path like any other.
+        if (!string.IsNullOrWhiteSpace(Signing.CertificatePath)
+            && !Path.IsPathRooted(Signing.CertificatePath))
+            Signing.CertificatePath = Path.GetFullPath(Path.Combine(baseDir, Signing.CertificatePath!));
     }
 
     /// <summary>

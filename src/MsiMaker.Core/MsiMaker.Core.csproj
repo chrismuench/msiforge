@@ -12,4 +12,14 @@
     <EmbeddedResource Include="$(MSBuildThisFileDirectory)../../recipes/*.json"
                       LogicalName="MsiMaker.Core.Recipes.%(Filename).json" />
   </ItemGroup>
+
+  <!--
+    PKCS#7 and RFC 3161, for signing an MSI in process. Not in the shared
+    framework, so it has to be asked for - but it is pure managed code from
+    Microsoft that runs identically on macOS, which is the whole point: signing
+    now needs nothing installed on the build machine.
+  -->
+  <ItemGroup>
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.0" />
+  </ItemGroup>
 </Project>

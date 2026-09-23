@@ -191,11 +191,40 @@ and scheduled task were all removed with no reboot.
 
 ## Code signing
 
-Authenticode over a compound file is deliberately not reimplemented. The
-signature covers a Windows-defined digest of the container inside a PKCS#7 blob,
-and getting that subtly wrong yields a package that looks signed and is rejected
-on the device. MsiMaker drives signtool or osslsigncode instead, so the file
-Windows validates is one Windows' own tooling produced.
+Signing is done in process, in managed code, so a package can be signed on macOS
+with nothing installed. The alternative was making every macOS user run
+`brew install osslsigncode` first, which is a dependency that exists only
+because the signing was not ours.
+
+The risk was real: the digest is a Windows-defined hash of the compound file
+inside a PKCS#7 blob, and getting it subtly wrong yields a package that looks
+signed and is rejected on the device. So it was written against an oracle -
+digests produced by signtool and osslsigncode were pulled out of already-signed
+packages and required to match byte for byte before a single signature was
+produced. Four packages from two independent signers match.
+
+Three things the obvious reading gets wrong, each found by that oracle:
+
+- **Stream ordering is a plain memcmp over the NUL-terminated UTF-16 name
+  bytes**, not the MS-CFB `(length, uppercase)` directory order. The two agree
+  for most files and diverge precisely because every MSI has a name beginning
+  ``.
+- **A name may be a byte prefix of another** (`!File` is the start of
+  `!FileSFPCatalog`), and the shorter sorts first - the comparison includes the
+  terminator. No package on disk had such a pair, so one was built specifically
+  to settle it.
+- **The root CLSID is hashed last.** Omitting it gives a plausible-looking wrong
+  answer.
+
+Two further quirks are Windows-specific and were found only because a signature
+osslsigncode happily accepted was rejected by Windows as "not a cryptographic
+message": Authenticode does not wrap its eContent in an OCTET STRING, and
+Windows refuses the SignedData version 3 that RFC 5652 requires for a non-data
+content type. Both are patched after encoding, outside anything a signature
+covers.
+
+signtool and osslsigncode are still used for what only they can do - the Windows
+certificate store, and Azure Trusted Signing.
 
 A password is never a field in the project file, only the *name* of an
 environment variable holding it - a project belongs in source control and a
@@ -204,11 +233,11 @@ secret in it would go too.
 Three modes, inferred from whichever fields are filled in so older projects keep
 building unchanged:
 
-| Mode | Key material | Verified here |
-|---|---|---|
-| `Pfx` | A PFX on disk, unlocked from an environment variable | Yes, end to end |
-| `CertificateStore` | A certificate already in the Windows store, by thumbprint | Argument shape only |
-| `AzureTrustedSigning` | The key never leaves the service; signtool calls it through a dlib | **No - see below** |
+| Mode | Key material | Needs a tool | Verified here |
+|---|---|---|---|
+| `Pfx` | A PFX on disk, unlocked from an environment variable | **no** | Yes, end to end |
+| `CertificateStore` | A certificate already in the Windows store, by thumbprint | signtool | Argument shape only |
+| `AzureTrustedSigning` | The key never leaves the service; signtool calls it through a dlib | signtool | **No - see below** |
 
 Verified for the PFX path with a throwaway self-signed certificate: the
 signature embeds, carries an RFC 3161 timestamp, and the signed package still
@@ -328,11 +357,11 @@ built-in id replaces it, so a wrong switch can be corrected the same day.
 | Rollback actions | Verified by forcing a failed install |
 | Closing running processes | Verified with HPIA holding its own files open |
 | Wrapped-EXE uninstall | Verified with 7-Zip's own uninstaller |
-| Code signing (PFX) | Verified end to end, timestamped |
+| Code signing (PFX) | Managed, no external tool; verified end to end, timestamped |
 | Code signing (Azure Trusted Signing) | Implemented; **not** verified against a real account |
 | `.intunewin` packaging | Working; HMAC verified |
 | Recipe library | 9 recipes, 2 verified |
 | Avalonia GUI | Builds and runs on Windows; cross-compiles for macOS |
 | Project bundles | Verified portable; same ProductCode from any directory |
-| Regression tests | 99 passing |
+| Regression tests | 114 passing |
 | macOS verification | Cross-compiles; not yet run on a Mac |

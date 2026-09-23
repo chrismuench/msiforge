@@ -77,6 +77,16 @@ public sealed class SigningOptions
     public string? SignerPath { get; set; }
 
     /// <summary>
+    /// Sign in process instead of driving an external tool. Null means decide,
+    /// which is in process whenever the key material allows it - that is the
+    /// only path that works on a machine with nothing installed, which is the
+    /// machine this tool is meant to run on. Set it false to insist on signtool
+    /// or osslsigncode; set it true to be told plainly when a mode cannot be
+    /// signed in process rather than quietly falling back.
+    /// </summary>
+    public bool? UseManagedSigner { get; set; }
+
+    /// <summary>
     /// Settles the mode. An explicit <see cref="Mode"/> always wins; otherwise
     /// the first field that is filled in decides, which keeps older projects
     /// behaving exactly as they did.
@@ -101,15 +111,15 @@ public sealed class SigningOptions
 public sealed record SigningResult(bool Signed, string Tool, string Detail);
 
 /// <summary>
-/// Signs an MSI by driving an external signer.
+/// Signs an MSI, in process where it can and by driving an external signer
+/// where it must.
 ///
-/// Authenticode over a compound file is not reimplemented here: the signature
-/// covers a Windows-defined digest of the container and is carried in a PKCS#7
-/// blob, and getting that subtly wrong produces a package that looks signed and
-/// is rejected on the device. Driving signtool or osslsigncode keeps the trust
-/// decision with code that Windows itself validates against.
+/// A PFX is signed in process by <see cref="MsiSigner"/>, which needs nothing
+/// installed and therefore works on a Mac. The two remaining modes cannot be:
+/// the Windows certificate store and Azure Trusted Signing both keep the
+/// private key where only signtool can reach it, so those still shell out.
 ///
-/// Azure Trusted Signing is driven the same way, through signtool's dlib hook:
+/// Azure Trusted Signing is driven through signtool's dlib hook:
 /// the digest goes to the service and the signature comes back, so the private
 /// key is never on the build machine at all. Credentials come from the ambient
 /// Azure credential chain (AZURE_TENANT_ID, AZURE_CLIENT_ID and
@@ -290,9 +300,31 @@ public static class CodeSigner
         }
     }
 
+    /// <summary>
+    /// Whether <see cref="MsiSigner"/> can do this job on its own. Only a PFX
+    /// qualifies: the Windows certificate store and Azure Trusted Signing both
+    /// hold the key somewhere this process cannot reach it.
+    /// </summary>
+    public static bool CanSignInProcess(SigningOptions options) =>
+        options.ResolveMode() == SigningMode.Pfx && !string.IsNullOrWhiteSpace(options.CertificatePath);
+
     public static SigningResult Sign(string msiPath, SigningOptions options)
     {
         if (!options.Enabled) return new SigningResult(false, "none", "Signing is not enabled for this project.");
+
+        if (options.UseManagedSigner ?? CanSignInProcess(options))
+        {
+            string? pfxPassword = ReadPassword(options);
+            string? complaint = Validate(options, pfxPassword);
+            if (complaint is not null) return new SigningResult(false, "managed", complaint);
+
+            if (!CanSignInProcess(options))
+                return new SigningResult(false, "managed",
+                    $"SigningMode {options.ResolveMode()} keeps the private key out of this process, so it "
+                    + "needs signtool. Leave UseManagedSigner unset, or set it false, to drive signtool instead.");
+
+            return MsiSigner.Sign(msiPath, options, pfxPassword);
+        }
 
         string? signer = FindSigner(options.SignerPath);
         if (signer is null)
@@ -303,9 +335,7 @@ public static class CodeSigner
         bool useOssl = Path.GetFileNameWithoutExtension(signer)
             .Equals("osslsigncode", StringComparison.OrdinalIgnoreCase);
 
-        string? password = string.IsNullOrWhiteSpace(options.PasswordEnvironmentVariable)
-            ? null
-            : Environment.GetEnvironmentVariable(options.PasswordEnvironmentVariable!);
+        string? password = ReadPassword(options);
 
         string? problem = Validate(options, password);
         if (problem is not null) return new SigningResult(false, signer, problem);
@@ -489,11 +519,25 @@ public static class CodeSigner
         }
     }
 
+    /// <summary>
+    /// The PFX password, from the environment variable the project names. The
+    /// project never holds the password itself, only that name.
+    /// </summary>
+    private static string? ReadPassword(SigningOptions options) =>
+        string.IsNullOrWhiteSpace(options.PasswordEnvironmentVariable)
+            ? null
+            : Environment.GetEnvironmentVariable(options.PasswordEnvironmentVariable!);
+
     /// <summary>Asks the signer whether the file carries a valid signature.</summary>
     public static SigningResult Verify(string msiPath, string? signerPath = null)
     {
         string? signer = FindSigner(signerPath);
-        if (signer is null) return new SigningResult(false, "none", "No signer available to verify with.");
+
+        // With nothing installed the digest can still be recomputed in process.
+        // That answers "has this package been altered since it was signed",
+        // which is most of the question, and says so rather than implying it
+        // checked the certificate chain as well.
+        if (signer is null) return MsiSigner.Verify(msiPath);
 
         bool useOssl = Path.GetFileNameWithoutExtension(signer)
             .Equals("osslsigncode", StringComparison.OrdinalIgnoreCase);

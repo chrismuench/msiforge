@@ -263,8 +263,20 @@ static int ShowTaskXml(string projectPath)
     foreach (var task in project.Tasks)
     {
         Console.WriteLine($"==== {task.FullName} ====");
+        // Mirror what the builder writes: an environment-variable path the
+        // target expands, not an MSI formatted expression.
+        string root = project.Root == MsiMaker.Core.Model.InstallRoot.CommonAppData
+            ? "%ProgramData%"
+            : project.Platform == MsiMaker.Core.Model.MsiPlatform.X86
+                ? "%ProgramFiles(x86)%"
+                : "%ProgramFiles%";
+        var segments = new List<string> { root };
+        if (!string.IsNullOrWhiteSpace(project.ManufacturerFolder)) segments.Add(project.ManufacturerFolder!);
+        segments.Add(project.EffectiveInstallFolder);
+        string installDir = string.Join("\\", segments);
+
         Console.WriteLine(MsiMaker.Core.Build.TaskXml.Build(
-            task, $"[#f_{task.ExePath}]", task.Arguments, "[INSTALLFOLDER]"));
+            task, installDir + "\\" + task.ExePath.Replace('/', '\\'), task.Arguments, installDir));
         Console.WriteLine();
     }
     return 0;
