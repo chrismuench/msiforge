@@ -82,6 +82,29 @@ public sealed class MsiDatabase
 
     public int Codepage { get; set; } = 65001;
 
+    private static readonly HashSet<string> InternalTables =
+        new(StringComparer.Ordinal) { "_Tables", "_Columns", "_StringPool", "_StringData" };
+
+    /// <summary>
+    /// Populates _Validation for the tables currently in the database. Windows
+    /// Installer reads this whenever it recreates a table, which an administrative
+    /// install does for every table in the package.
+    /// </summary>
+    public void AddValidation()
+    {
+        Tables.Remove("_Validation");
+        var validation = new MsiTable("_Validation",
+            MsiSchema.ValidationColumns.Select(c => new MsiColumn(c.Name, c.Type)).ToArray());
+
+        foreach (var row in MsiSchema.ValidationRows)
+        {
+            if (row.Length == 0 || row[0] is not string table) continue;
+            if (!Tables.ContainsKey(table)) continue;
+            validation.Rows.Add((object?[])row.Clone());
+        }
+        Tables["_Validation"] = validation;
+    }
+
     public MsiTable Table(string name, params MsiColumn[] columns)
     {
         if (Tables.TryGetValue(name, out var existing)) return existing;
@@ -253,9 +276,13 @@ public sealed class MsiDatabase
         var order = new List<string>();
         var refs = new List<int>();
 
+        // Index 0 means NULL. An empty string is a different thing: it gets a real
+        // pool slot of zero length. Collapsing "" to NULL corrupts non-nullable
+        // columns - _Validation is full of empty cells - and the table then fails
+        // to load.
         int Intern(string? s)
         {
-            if (string.IsNullOrEmpty(s)) return 0;
+            if (s is null) return 0;
             if (index.TryGetValue(s, out int i)) { refs[i - 1]++; return i; }
             order.Add(s);
             refs.Add(1);
@@ -263,23 +290,37 @@ public sealed class MsiDatabase
             return order.Count;
         }
 
-        var tableNames = Tables.Keys.Where(t => !t.StartsWith('_')).OrderBy(t => t, StringComparer.Ordinal).ToList();
+        // _Tables, _Columns and the string pool describe the database and are
+        // emitted separately. _Validation is an ordinary table and must be listed,
+        // or Windows Installer cannot recreate tables (error 2211).
+        var tableNames = Tables.Keys
+            .Where(t => !InternalTables.Contains(t))
+            .OrderBy(t => t, StringComparer.Ordinal)
+            .ToList();
 
+        // Intern once per reference that will actually be emitted, walking the
+        // streams in write order. The stored refcount has to match real usage:
+        // Windows Installer manages the pool with it, and an under-counted
+        // string makes whole tables fail to load.
+
+        // _Tables: one reference per table name.
+        foreach (var name in tableNames) Intern(name);
+
+        // _Columns: one row per column, each naming its table and its column.
+        foreach (var name in tableNames)
+            foreach (var col in Tables[name].Columns)
+            {
+                Intern(name);
+                Intern(col.Name);
+            }
+
+        // Table streams: one reference per non-null string cell.
         foreach (var name in tableNames)
         {
-            Intern(name);
             var t = Tables[name];
-            foreach (var col in t.Columns) Intern(col.Name);
             foreach (var row in t.Rows)
                 for (int c = 0; c < t.Columns.Count; c++)
                     if (t.Columns[c].IsString) Intern(row[c] as string);
-        }
-
-        // _Tables and _Columns reference table and column names a second time.
-        foreach (var name in tableNames)
-        {
-            Intern(name);
-            foreach (var col in Tables[name].Columns) Intern(col.Name);
         }
 
         int stringRefSize = order.Count >= 0xFFFF ? 3 : 2;
@@ -295,7 +336,14 @@ public sealed class MsiDatabase
         for (int i = 0; i < order.Count; i++)
         {
             byte[] b = enc.GetBytes(order[i]);
-            if (b.Length > 0xFFFF)
+            if (b.Length == 0)
+            {
+                // len == 0 with a non-zero refcount means "long string", so an
+                // empty string must store a refcount of 0.
+                PoolWord(0);
+                PoolWord(0);
+            }
+            else if (b.Length > 0xFFFF)
             {
                 PoolWord(0);
                 PoolWord(b.Length >> 16);
@@ -343,14 +391,15 @@ public sealed class MsiDatabase
         foreach (var name in tableNames)
         {
             var t = Tables[name];
+            var sortedRows = SortByPrimaryKey(t, index);
             var ms = new MemoryStream();
             for (int c = 0; c < t.Columns.Count; c++)
             {
                 var col = t.Columns[c];
-                foreach (var row in t.Rows)
+                foreach (var row in sortedRows)
                 {
                     object? v = row[c];
-                    if (col.IsString) WriteRef(ms, v is string s && s.Length > 0 ? index[s] : 0, stringRefSize);
+                    if (col.IsString) WriteRef(ms, v is string s ? index[s] : 0, stringRefSize);
                     else if (col.Width(stringRefSize) == 2) WriteInt16(ms, v is null ? (short)0 : (short)((int)v + 0x8000));
                     else WriteInt32(ms, v is null ? 0 : unchecked((int)((uint)(int)v ^ 0x80000000)));
                 }
@@ -364,6 +413,42 @@ public sealed class MsiDatabase
         streams.Add(new CfbStream("\u0005SummaryInformation", Summary.ToBytes()));
 
         return new CfbWriter(sectorSize: 4096).Write(streams);
+    }
+
+    /// <summary>
+    /// Windows Installer requires a table's rows to be stored in primary-key
+    /// order, and for string keys that order is by string-pool index, not by the
+    /// text. Because indices are assigned afresh on every write, rows have to be
+    /// re-sorted here; leaving the original order produces a database whose
+    /// tables our own reader accepts but msi.dll refuses to load (error 2229).
+    /// </summary>
+    private static List<object?[]> SortByPrimaryKey(MsiTable table, Dictionary<string, int> index)
+    {
+        var keyColumns = new List<int>();
+        for (int i = 0; i < table.Columns.Count; i++)
+            if (table.Columns[i].IsKey) keyColumns.Add(i);
+
+        if (keyColumns.Count == 0) return table.Rows;
+
+        long SortKey(object?[] row, int column) => row[column] switch
+        {
+            // Index 0 is NULL, which sorts first - exactly as a zero cell does.
+            string s => index.TryGetValue(s, out int i) ? i : 0,
+            int v => v,
+            _ => 0,
+        };
+
+        var sorted = new List<object?[]>(table.Rows);
+        sorted.Sort((a, b) =>
+        {
+            foreach (int c in keyColumns)
+            {
+                int cmp = SortKey(a, c).CompareTo(SortKey(b, c));
+                if (cmp != 0) return cmp;
+            }
+            return 0;
+        });
+        return sorted;
     }
 
     private static void WriteRef(Stream s, int value, int size)

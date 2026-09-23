@@ -89,6 +89,11 @@ sref = 3 if long_refs else 2
 def rd_strref(b, o):
     return int.from_bytes(b[o:o+sref], 'little')
 
+def signed32(v):
+    """MSI stores int32 cells biased; bring the result back into signed range."""
+    return v - (1 << 32) if v >= (1 << 31) else v
+
+
 def parse(name, coldefs):
     """coldefs: list of (name, type) ; MSI tables are COLUMN-major."""
     b = streams['!' + name]
@@ -108,7 +113,7 @@ def parse(name, coldefs):
             elif w == 2:
                 v = int.from_bytes(raw, 'little'); vals.append(None if v == 0 else v - 0x8000)
             else:
-                v = int.from_bytes(raw, 'little'); vals.append(None if v == 0 else v ^ 0x80000000)
+                v = int.from_bytes(raw, 'little'); vals.append(None if v == 0 else signed32(v ^ 0x80000000))
         cols.append(vals); o += rows * w
     return [tuple(c[r] for c in cols) for r in range(rows)]
 

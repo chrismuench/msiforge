@@ -71,22 +71,30 @@ public sealed class SummaryInfo
         else Properties[pid] = value;
     }
 
+    /// <summary>
+    /// ANSI codepage for the summary stream. Windows Installer does not accept
+    /// UTF-8 (65001) here even though the database string pool may use it: every
+    /// string property silently reads back empty, and a package with no Template
+    /// is then rejected outright with error 1620.
+    /// </summary>
+    public const int SummaryCodepage = 1252;
+
     /// <summary>Defaults that produce a valid, Intune-friendly per-machine package.</summary>
     public static SummaryInfo CreateDefault(string productName, string manufacturer, string platform, int language, bool compressed)
     {
         var si = new SummaryInfo();
-        si.Properties[PidCodepage] = 65001;
+        si.Properties[PidCodepage] = SummaryCodepage;
         si.Properties[PidTitle] = "Installation Database";
         si.Subject = productName;
         si.Author = manufacturer;
         si.Keywords = "Installer,MSI";
-        si.Comments = $"{productName} installer";
+        si.Comments = $"This installer database contains the logic and data required to install {productName}.";
         si.Template = $"{platform};{language}";
         si.RevisionNumber = "{" + Guid.NewGuid().ToString().ToUpperInvariant() + "}";
         si.Properties[PidCreated] = DateTime.UtcNow;
         si.Properties[PidLastSaved] = DateTime.UtcNow;
-        si.PageCount = 200;                       // schema version: Windows Installer 2.0+
-        si.WordCount = compressed ? 2 : 0;        // 2 = files are in a cabinet, short names
+        si.PageCount = 500;                       // schema version: Windows Installer 4.5+
+        si.WordCount = compressed ? 2 : 0;        // 2 = long file names, files in a cabinet
         si.Properties[PidSecurity] = 2;           // read-only recommended
         si.CreatingApp = "MsiMaker";
         return si;
@@ -129,7 +137,11 @@ public sealed class SummaryInfo
             switch (type)
             {
                 case 2 when off + 6 <= data.Length: // VT_I2
-                    si.Properties[pid] = (int)BinaryPrimitives.ReadInt16LittleEndian(data.AsSpan(off + 4));
+                    // The codepage occupies the full unsigned range (65001 stores
+                    // as 0xFDE9), so it must not be read back as a signed short.
+                    si.Properties[pid] = pid == PidCodepage
+                        ? BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(off + 4))
+                        : (int)BinaryPrimitives.ReadInt16LittleEndian(data.AsSpan(off + 4));
                     break;
                 case 3 when off + 8 <= data.Length: // VT_I4
                     si.Properties[pid] = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(off + 4));
@@ -161,7 +173,8 @@ public sealed class SummaryInfo
 
     public byte[] ToBytes()
     {
-        int codepage = Properties.GetValueOrDefault(PidCodepage) as int? ?? 65001;
+        int codepage = Properties.GetValueOrDefault(PidCodepage) as int? ?? SummaryCodepage;
+        if (codepage < 0) codepage &= 0xFFFF;
         var enc = codepage == 65001 ? Encoding.UTF8 : Encoding.Latin1;
 
         // Property id 1 (codepage) must sort first within the section.

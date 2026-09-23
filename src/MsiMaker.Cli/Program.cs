@@ -1,3 +1,5 @@
+using MsiMaker.Core.Build;
+using MsiMaker.Core.Model;
 using MsiMaker.Core.Msi;
 
 if (args.Length == 0)
@@ -5,8 +7,9 @@ if (args.Length == 0)
     Console.WriteLine("""
         msimaker - cross-platform MSI builder
 
-          inspect   <file.msi>              Show identity, upgrade and table summary
-          roundtrip <file.msi> <out.msi>    Read, rewrite and verify table fidelity
+          build     <project.json> [out.msi]   Build an MSI from a project
+          inspect   <file.msi>                 Show identity, upgrade and table summary
+          roundtrip <file.msi> <out.msi>       Read, rewrite and verify table fidelity
         """);
     return 0;
 }
@@ -15,6 +18,9 @@ try
 {
     switch (args[0])
     {
+        case "mktest": return MakeMinimal(args[1]);
+        case "subset": return Subset(args[1], args[2], args[3..]);
+        case "build": return BuildProject(args[1], args.Length > 2 ? args[2] : null);
         case "inspect": return Inspect(args[1]);
         case "roundtrip": return RoundTrip(args[1], args[2]);
         default:
@@ -26,6 +32,68 @@ catch (Exception ex)
 {
     Console.Error.WriteLine($"error: {ex.Message}");
     return 1;
+}
+
+/// <summary>
+/// Rewrites an MSI keeping only the named tables, so a reader disagreement can
+/// be bisected down to the table that triggers it.
+/// </summary>
+static int Subset(string input, string output, string[] keep)
+{
+    var db = MsiDatabase.Load(input);
+    var wanted = new HashSet<string>(keep, StringComparer.OrdinalIgnoreCase);
+    foreach (var name in db.Tables.Keys.ToList())
+        if (!wanted.Contains(name)) db.Tables.Remove(name);
+    db.Streams.Clear();
+    db.Save(output);
+    Console.WriteLine($"{Path.GetFileName(output)}: {db.Tables.Count} tables "
+                      + $"({string.Join(", ", db.Tables.Keys.OrderBy(k => k, StringComparer.Ordinal))})");
+    return 0;
+}
+
+/// <summary>
+/// Smallest database our writer can emit: one table, the string pool and the
+/// summary stream. Used to reproduce reader disagreements in a file small
+/// enough to read by hand.
+/// </summary>
+static int MakeMinimal(string output)
+{
+    var db = new MsiDatabase();
+    db.SetProperty("ProductName", "Min");
+    db.SetProperty("ProductVersion", "1.0.0");
+    db.SetProperty("ProductCode", "{11111111-1111-1111-1111-111111111111}");
+    db.SetProperty("Manufacturer", "M");
+    db.Summary = SummaryInfo.CreateDefault("Min", "M", "x64", 1033, compressed: false);
+    db.Save(output);
+    Console.WriteLine($"wrote {output} ({new FileInfo(output).Length:N0} bytes), "
+                      + $"tables: {string.Join(", ", db.Tables.Keys)}");
+    return 0;
+}
+
+static int BuildProject(string projectPath, string? outputPath)
+{
+    var project = MsiProject.Load(projectPath);
+
+    // Relative payload paths are resolved against the project file, not the cwd.
+    string baseDir = Path.GetDirectoryName(Path.GetFullPath(projectPath))!;
+    foreach (var f in project.Files)
+        if (!Path.IsPathRooted(f.SourcePath))
+            f.SourcePath = Path.GetFullPath(Path.Combine(baseDir, f.SourcePath));
+
+    outputPath ??= Path.Combine(baseDir, "out",
+        $"{MsiProject.Sanitize(project.ProductName)}-{project.ComparableVersion}.msi");
+
+    var result = MsiBuilder.Build(project, outputPath);
+
+    Console.WriteLine($"built {result.MsiPath}");
+    Console.WriteLine($"  ProductName    {project.ProductName}");
+    Console.WriteLine($"  ProductVersion {result.Version}");
+    Console.WriteLine($"  ProductCode    {DeterministicGuid.Format(result.ProductCode)}  (derived from version)");
+    Console.WriteLine($"  UpgradeCode    {DeterministicGuid.Format(result.UpgradeCode)}  (stable)");
+    Console.WriteLine($"  PackageCode    {result.PackageCode}");
+    Console.WriteLine($"  Size           {result.SizeBytes:N0} bytes");
+    foreach (var w in result.Warnings) Console.WriteLine($"  warning: {w}");
+    return 0;
 }
 
 static int Inspect(string path)
@@ -77,8 +145,10 @@ static int RoundTrip(string input, string output)
     Console.WriteLine($"round-trip {Path.GetFileName(input)} -> {Path.GetFileName(output)}");
     Console.WriteLine($"  size {new FileInfo(input).Length:N0} -> {new FileInfo(output).Length:N0} bytes");
 
-    // _Validation is intentionally not reproduced; it is advisory metadata.
-    var expected = original.Tables.Keys.Where(t => !t.StartsWith('_')).OrderBy(t => t, StringComparer.Ordinal).ToList();
+    // Compare every table the reader surfaced, _Validation included: Windows
+    // Installer consults it when loading tables, so corruption there breaks
+    // otherwise-valid tables.
+    var expected = original.Tables.Keys.OrderBy(t => t, StringComparer.Ordinal).ToList();
     foreach (var name in expected)
     {
         if (!reread.Tables.TryGetValue(name, out var got)) { Fail($"table {name} missing"); continue; }
@@ -90,12 +160,17 @@ static int RoundTrip(string input, string output)
             if (want.Columns[c].Type != got.Columns[c].Type) Fail($"{name}.{want.Columns[c].Name} type 0x{want.Columns[c].Type:X4} -> 0x{got.Columns[c].Type:X4}");
         }
         if (got.Rows.Count != want.Rows.Count) { Fail($"{name} row count {want.Rows.Count} -> {got.Rows.Count}"); continue; }
-        for (int r = 0; r < want.Rows.Count; r++)
-            for (int c = 0; c < want.Columns.Count; c++)
-            {
-                object? a = want.Rows[r][c], b = got.Rows[r][c];
-                if (!Equals(a, b)) Fail($"{name}[{r}].{want.Columns[c].Name}: {a ?? "null"} -> {b ?? "null"}");
-            }
+
+        // Row order is a storage detail - rows are written in primary-key order,
+        // which depends on freshly assigned string indices - so compare as sets.
+        static string RowKey(object?[] row) =>
+            string.Join('\u001f', row.Select(v => v?.ToString() ?? "\u0000"));
+
+        var wantRows = want.Rows.Select(RowKey).OrderBy(k => k, StringComparer.Ordinal).ToList();
+        var gotRows = got.Rows.Select(RowKey).OrderBy(k => k, StringComparer.Ordinal).ToList();
+        for (int r = 0; r < wantRows.Count; r++)
+            if (wantRows[r] != gotRows[r])
+                Fail($"{name}: row {wantRows[r].Replace('\u001f', '|')} -> {gotRows[r].Replace('\u001f', '|')}");
     }
 
     foreach (var (name, data) in original.Streams)
@@ -109,7 +184,7 @@ static int RoundTrip(string input, string output)
     if (original.Summary.WordCount != reread.Summary.WordCount) Fail("summary WordCount");
 
     Console.WriteLine(problems == 0
-        ? $"  OK - {expected.Count} tables, {original.Tables.Where(t => !t.Key.StartsWith('_')).Sum(t => t.Value.Rows.Count)} rows, "
+        ? $"  OK - {expected.Count} tables, {original.Tables.Sum(t => t.Value.Rows.Count)} rows, "
           + $"{original.Streams.Count} streams identical"
         : $"  {problems} mismatch(es)");
     return problems == 0 ? 0 : 1;

@@ -159,7 +159,13 @@ public sealed class CfbWriter
 {
     private readonly int _sectorSize;
     private const int MiniSectorSize = 64;
-    private const uint MiniCutoff = 4096;
+
+    /// <summary>
+    /// Streams smaller than this live in the mini stream. 4096 is the standard
+    /// value; it is settable so the mini-stream path can be taken out of the
+    /// picture when diagnosing a reader that disagrees with us.
+    /// </summary>
+    public uint MiniCutoff { get; set; } = 4096;
 
     /// <summary>CLSID that marks the compound file as a Windows Installer database.</summary>
     public Guid RootClsid { get; set; } = new("000C1084-0000-0000-C000-000000000046");
@@ -179,7 +185,12 @@ public sealed class CfbWriter
         public long Size;
         public uint Left = Cfb.NoStream, Right = Cfb.NoStream, Child = Cfb.NoStream;
         public int Index;
+        public int Depth;
+        public byte Color = Black;
     }
+
+    private const byte Red = 0;
+    private const byte Black = 1;
 
     public byte[] Write(IEnumerable<CfbStream> streams)
     {
@@ -265,8 +276,20 @@ public sealed class CfbWriter
 
         for (int i = 0; i < entries.Count; i++)
             WriteDirEntry(dirBytes.AsSpan(i * 128, 128), entries[i], i == 0);
+
+        // Spare slots must carry NOSTREAM sibling and child pointers. Left at
+        // zero they each claim the root entry as their left, right and child,
+        // which readers that scan the whole directory array reject.
         for (int i = entries.Count; i < dirBytes.Length / 128; i++)
-            dirBytes.AsSpan(i * 128, 128).Fill(0);
+        {
+            var span = dirBytes.AsSpan(i * 128, 128);
+            span.Clear();
+            span[66] = (byte)CfbEntryType.Empty;
+            span[67] = 1; // black
+            BinaryPrimitives.WriteUInt32LittleEndian(span[68..], Cfb.NoStream);
+            BinaryPrimitives.WriteUInt32LittleEndian(span[72..], Cfb.NoStream);
+            BinaryPrimitives.WriteUInt32LittleEndian(span[76..], Cfb.NoStream);
+        }
         payload[dirPayloadIndex] = dirBytes;
 
         var outMs = new MemoryStream();
@@ -331,7 +354,7 @@ public sealed class CfbWriter
         name.CopyTo(span);
         BinaryPrimitives.WriteUInt16LittleEndian(span[64..], (ushort)(name.Length + 2));
         span[66] = (byte)e.Type;
-        span[67] = 1; // black
+        span[67] = isRoot ? Black : e.Color;
         BinaryPrimitives.WriteUInt32LittleEndian(span[68..], e.Left);
         BinaryPrimitives.WriteUInt32LittleEndian(span[72..], e.Right);
         BinaryPrimitives.WriteUInt32LittleEndian(span[76..], e.Child);
@@ -342,8 +365,9 @@ public sealed class CfbWriter
 
     /// <summary>
     /// The directory is a red-black tree keyed by (name length, uppercase ordinal).
-    /// A balanced BST with every node painted black satisfies the ordering invariant,
-    /// and colour is advisory for readers.
+    /// Building it balanced from the sorted list gives the ordering; colouring only
+    /// the deepest level red gives a valid black-height, since every root-to-leaf
+    /// path then crosses the same number of black nodes.
     /// </summary>
     private static void BuildTree(List<Entry> entries)
     {
@@ -354,14 +378,21 @@ public sealed class CfbWriter
             int c = a.Name.Length.CompareTo(b.Name.Length);
             return c != 0 ? c : string.CompareOrdinal(a.Name.ToUpperInvariant(), b.Name.ToUpperInvariant());
         });
-        entries[0].Child = Build(children, 0, children.Count - 1);
 
-        static uint Build(List<Entry> list, int lo, int hi)
+        int maxDepth = 0;
+        entries[0].Child = Build(children, 0, children.Count - 1, 0, ref maxDepth);
+
+        foreach (var e in children)
+            e.Color = maxDepth > 0 && e.Depth == maxDepth ? Red : Black;
+
+        static uint Build(List<Entry> list, int lo, int hi, int depth, ref int maxDepth)
         {
             if (lo > hi) return Cfb.NoStream;
             int mid = (lo + hi) / 2;
-            list[mid].Left = Build(list, lo, mid - 1);
-            list[mid].Right = Build(list, mid + 1, hi);
+            list[mid].Depth = depth;
+            if (depth > maxDepth) maxDepth = depth;
+            list[mid].Left = Build(list, lo, mid - 1, depth + 1, ref maxDepth);
+            list[mid].Right = Build(list, mid + 1, hi, depth + 1, ref maxDepth);
             return (uint)list[mid].Index;
         }
     }
