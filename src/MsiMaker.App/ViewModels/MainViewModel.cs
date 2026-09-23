@@ -5,6 +5,8 @@ using MsiMaker.Core.Build;
 using MsiMaker.Core.Intune;
 using MsiMaker.Core.Model;
 using MsiMaker.Core.Payload;
+using MsiMaker.Core.Recipes;
+using MsiMaker.Core.Signing;
 
 namespace MsiMaker.App.ViewModels;
 
@@ -92,6 +94,66 @@ public sealed class CheckRow(UpgradeCheck check)
     public bool IsFail { get; } = check.Status is not (CheckStatus.Pass or CheckStatus.Warn);
 }
 
+/// <summary>
+/// One row of the recipe library, and the whole of its detail pane.
+///
+/// Everything the detail pane needs is surfaced here rather than reached
+/// through <see cref="Model"/>, because compiled bindings will not walk into a
+/// nullable Core type and the emptiness flags have to be booleans anyway.
+/// </summary>
+public sealed class RecipeRow(Recipe recipe)
+{
+    public Recipe Model { get; } = recipe;
+
+    public string Id => Model.Id;
+    public string Name => Model.Name;
+    public string Vendor => string.IsNullOrWhiteSpace(Model.Vendor) ? "unknown vendor" : Model.Vendor;
+    public string Description => Model.Description;
+    public string Awkwardness => Model.Awkwardness;
+
+    public string DownloadUrl => Model.DownloadUrl ?? "";
+    public bool HasDownloadUrl => !string.IsNullOrWhiteSpace(Model.DownloadUrl);
+
+    /// <summary>Only http and https are ever handed to the shell; see MainWindow.OnOpenRecipeUrl.</summary>
+    public bool CanOpenDownloadUrl =>
+        Uri.TryCreate(Model.DownloadUrl, UriKind.Absolute, out var uri)
+        && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+
+    public string DownloadNotes => Model.DownloadNotes ?? "";
+    public bool HasDownloadNotes => !string.IsNullOrWhiteSpace(Model.DownloadNotes);
+
+    public string SetupFileHint => Model.SetupFileHint ?? "";
+    public bool HasSetupFileHint => !string.IsNullOrWhiteSpace(Model.SetupFileHint);
+
+    public IReadOnlyList<string> Notes => Model.Notes;
+    public bool HasNotes => Model.Notes.Count > 0;
+
+    public bool IsVerified => Model.Verified;
+    public bool IsUntested => !Model.Verified;
+
+    /// <summary>The badge the list shows. Short enough to sit beside a long product name.</summary>
+    public string Badge => Model.Verified ? "VERIFIED" : "UNTESTED";
+
+    public bool WantsFolder => Model.PayloadKind == RecipePayloadKind.Folder;
+
+    /// <summary>
+    /// Names the shape of the payload on the button itself. An admin who has
+    /// downloaded a SoftPaq and is looking for a file will otherwise open the
+    /// picker, find nothing, and conclude the recipe is broken.
+    /// </summary>
+    public string UseLabel => WantsFolder
+        ? "Use this recipe - choose a folder…"
+        : "Use this recipe - choose a file…";
+
+    public string PayloadPrompt => Model.PayloadPrompt;
+
+    public string TemplateVersion => Model.Project.Version;
+
+    public string Origin => Model.FromUserFolder
+        ? "From your recipes folder, so it replaces any built-in recipe of the same id."
+        : "Built into MsiMaker.";
+}
+
 public sealed class MainViewModel : ObservableObject
 {
     private MsiProject _project = new() { UpgradeCode = Guid.NewGuid() };
@@ -99,8 +161,47 @@ public sealed class MainViewModel : ObservableObject
     public ObservableCollection<FileRow> Files { get; } = [];
     public ObservableCollection<RunRow> Run { get; } = [];
     public ObservableCollection<CheckRow> Checks { get; } = [];
+    public ObservableCollection<RecipeRow> Recipes { get; } = [];
 
     public MsiProject Project => _project;
+
+    public MainViewModel()
+    {
+        // Read once at start-up: the library is a handful of embedded resources
+        // plus whatever JSON sits in the user folder, and re-reading it on every
+        // selection would only make the list flicker.
+        _library = RecipeLibrary.Load();
+        foreach (var recipe in _library.List()) Recipes.Add(new RecipeRow(recipe));
+        SelectedRecipe = Recipes.FirstOrDefault();
+    }
+
+    // ------------------------------------------------------------- library
+
+    private readonly RecipeLibrary _library;
+
+    private RecipeRow? _selectedRecipe;
+    public RecipeRow? SelectedRecipe
+    {
+        get => _selectedRecipe;
+        set { if (Set(ref _selectedRecipe, value)) Raise(nameof(HasSelectedRecipe)); }
+    }
+
+    public bool HasSelectedRecipe => _selectedRecipe is not null;
+
+    /// <summary>Where a user's own recipe JSON is read from, shown so it can be found.</summary>
+    public string RecipeUserDirectory => _library.UserDirectory;
+
+    public bool HasRecipeProblems => _library.Problems.Count > 0;
+
+    /// <summary>Files in the user folder that would not parse. Silence here would be worse.</summary>
+    public string RecipeProblems =>
+        "Ignored in your recipes folder: " + string.Join("; ", _library.Problems);
+
+    /// <summary>
+    /// Replaces the current project with a recipe's template, payload filled in.
+    /// </summary>
+    public void UseRecipe(Recipe recipe, string payloadPath) =>
+        LoadProject(RecipeLibrary.Instantiate(recipe, payloadPath));
 
     // ------------------------------------------------------------- identity
 
@@ -180,6 +281,146 @@ public sealed class MainViewModel : ObservableObject
 
     private string _outputPath = "";
     public string OutputPath { get => _outputPath; set => Set(ref _outputPath, value); }
+
+    // -------------------------------------------------------------- signing
+
+    private SigningOptions Signing => _project.Signing;
+
+    public bool SignEnabled
+    {
+        get => Signing.Enabled;
+        set { Signing.Enabled = value; Raise(); }
+    }
+
+    /// <summary>
+    /// Friendly names for <see cref="SigningMode"/>. The enum spellings are what
+    /// goes in the project file and what the CLI takes; they are not what an
+    /// admin should have to read out of a drop-down.
+    /// </summary>
+    public IReadOnlyList<string> SigningModeNames { get; } =
+        ["PFX file", "Windows certificate store", "Azure Trusted Signing"];
+
+    public string SigningModeName
+    {
+        get => Signing.ResolveMode() switch
+        {
+            SigningMode.CertificateStore => SigningModeNames[1],
+            SigningMode.AzureTrustedSigning => SigningModeNames[2],
+            _ => SigningModeNames[0],
+        };
+        set
+        {
+            // Written through to Mode rather than left to be inferred, so the
+            // choice survives a save and a reload even before any field is filled.
+            Signing.Mode = value == SigningModeNames[1] ? SigningMode.CertificateStore
+                         : value == SigningModeNames[2] ? SigningMode.AzureTrustedSigning
+                         : SigningMode.Pfx;
+            Raise();
+            Raise(nameof(IsPfxMode));
+            Raise(nameof(IsStoreMode));
+            Raise(nameof(IsAzureMode));
+        }
+    }
+
+    public bool IsPfxMode => Signing.ResolveMode() == SigningMode.Pfx;
+    public bool IsStoreMode => Signing.ResolveMode() == SigningMode.CertificateStore;
+    public bool IsAzureMode => Signing.ResolveMode() == SigningMode.AzureTrustedSigning;
+
+    public string CertificatePath
+    {
+        get => Signing.CertificatePath ?? "";
+        set { Signing.CertificatePath = Blank(value); Raise(); }
+    }
+
+    public string PasswordEnvironmentVariable
+    {
+        get => Signing.PasswordEnvironmentVariable ?? "";
+        set { Signing.PasswordEnvironmentVariable = Blank(value); Raise(); }
+    }
+
+    public string Thumbprint
+    {
+        get => Signing.Thumbprint ?? "";
+        set { Signing.Thumbprint = Blank(value); Raise(); }
+    }
+
+    public string AzureEndpoint
+    {
+        get => Signing.AzureEndpoint ?? "";
+        set { Signing.AzureEndpoint = Blank(value); Raise(); }
+    }
+
+    public string AzureCodeSigningAccountName
+    {
+        get => Signing.AzureCodeSigningAccountName ?? "";
+        set { Signing.AzureCodeSigningAccountName = Blank(value); Raise(); }
+    }
+
+    public string AzureCertificateProfileName
+    {
+        get => Signing.AzureCertificateProfileName ?? "";
+        set { Signing.AzureCertificateProfileName = Blank(value); Raise(); }
+    }
+
+    public string AzureDlibPath
+    {
+        get => Signing.AzureDlibPath ?? "";
+        set { Signing.AzureDlibPath = Blank(value); Raise(); }
+    }
+
+    public string TimestampUrl
+    {
+        get => Signing.TimestampUrl;
+        set { Signing.TimestampUrl = value; Raise(); }
+    }
+
+    /// <summary>An empty box means "unset", not an empty string the validator would trip over.</summary>
+    private static string? Blank(string value) => string.IsNullOrWhiteSpace(value) ? null : value;
+
+    private string? _signerPath;
+    private bool _signerChecked;
+
+    /// <summary>
+    /// Deferred because finding signtool means walking the Windows Kits tree,
+    /// which is not worth doing on every start-up for a feature most projects
+    /// never enable. The Build tab is realised on first view, so this runs then.
+    /// </summary>
+    private void EnsureSignerChecked()
+    {
+        if (_signerChecked) return;
+        _signerChecked = true;
+        try { _signerPath = CodeSigner.FindSigner(Signing.SignerPath); }
+        catch (Exception) { _signerPath = null; }
+    }
+
+    public bool SignerFound
+    {
+        get { EnsureSignerChecked(); return _signerPath is not null; }
+    }
+
+    public string SignerBadge => SignerFound ? "FOUND" : "MISSING";
+
+    public string SignerStatus
+    {
+        get
+        {
+            EnsureSignerChecked();
+            return _signerPath
+                ?? "No signer is installed. Signing needs signtool.exe from the Windows SDK, or "
+                   + "osslsigncode on any platform. Until one is present every build with signing "
+                   + "enabled will report SIGNING FAILED and leave the MSI unsigned.";
+        }
+    }
+
+    /// <summary>Re-runs discovery, for the admin who has just installed the SDK.</summary>
+    public void RecheckSigner()
+    {
+        _signerChecked = false;
+        _signerPath = null;
+        Raise(nameof(SignerFound));
+        Raise(nameof(SignerBadge));
+        Raise(nameof(SignerStatus));
+    }
 
     private string _log = "";
     public string Log { get => _log; set => Set(ref _log, value); }
@@ -351,6 +592,13 @@ public sealed class MainViewModel : ObservableObject
             nameof(ProductName), nameof(Manufacturer), nameof(Version), nameof(UpgradeCode),
             nameof(ProductCodePreview), nameof(InstallFolder), nameof(Platform),
             nameof(EmitIntuneWin), nameof(VersionNote), nameof(CanBuild), nameof(HasFiles),
+
+            // Signing lives on the project too, so a loaded project - or a
+            // recipe template - has to repaint the whole signing section.
+            nameof(SignEnabled), nameof(SigningModeName), nameof(IsPfxMode), nameof(IsStoreMode),
+            nameof(IsAzureMode), nameof(CertificatePath), nameof(PasswordEnvironmentVariable),
+            nameof(Thumbprint), nameof(AzureEndpoint), nameof(AzureCodeSigningAccountName),
+            nameof(AzureCertificateProfileName), nameof(AzureDlibPath), nameof(TimestampUrl),
         }) Raise(name);
     }
 }

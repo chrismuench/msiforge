@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
@@ -5,6 +6,8 @@ using Avalonia.Platform.Storage;
 using MsiMaker.App.ViewModels;
 using MsiMaker.Core.Intune;
 using MsiMaker.Core.Model;
+using MsiMaker.Core.Recipes;
+using MsiMaker.Core.Signing;
 
 namespace MsiMaker.App.Views;
 
@@ -50,9 +53,67 @@ public partial class MainWindow : Window
         Find<Button>("OpenOutputButton").Click += OnOpenOutput;
         Find<Button>("OpenProjectButton").Click += OnOpenProject;
         Find<Button>("SaveProjectButton").Click += OnSaveProject;
+
+        Find<Button>("UseRecipeButton").Click += OnUseRecipe;
+        Find<Button>("OpenRecipeUrlButton").Click += OnOpenRecipeUrl;
+        Find<Button>("OpenRecipesFolderButton").Click += OnOpenRecipesFolder;
+        Find<Button>("OpenProjectOnLibraryButton").Click += OnOpenProject;
+        Find<Button>("StartBlankButton").Click += OnStartBlank;
+
+        Find<Button>("PickCertificateButton").Click += OnPickCertificate;
+        Find<Button>("PickDlibButton").Click += OnPickDlib;
+        Find<Button>("RecheckSignerButton").Click += OnRecheckSigner;
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
+
+    /// <summary>
+    /// Shrinks the window to whatever display it actually opened on.
+    ///
+    /// The declared size is comfortable on a desktop and taller than the work
+    /// area of a 1366x768 laptop, or of any screen at 150% scaling - where the
+    /// bottom of the window, status bar and all, ends up below the edge of the
+    /// screen with no way to drag it back. The screen is not known until the
+    /// window is open, so the clamp cannot live in XAML.
+    /// </summary>
+    protected override void OnOpened(EventArgs e)
+    {
+        base.OnOpened(e);
+
+        var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+        if (screen is null) return;
+
+        // WorkingArea excludes the taskbar and is in physical pixels, so it has
+        // to be divided by the scaling factor before it can be compared with a
+        // logical size. A driver reporting nonsense is treated as unscaled.
+        double scaling = screen.Scaling > 0 ? screen.Scaling : 1.0;
+        double availableWidth = screen.WorkingArea.Width / scaling;
+        double availableHeight = screen.WorkingArea.Height / scaling;
+        if (availableWidth <= 0 || availableHeight <= 0) return;
+
+        // Two caps, whichever is tighter: a proportion of the work area so the
+        // window never fills the screen edge to edge, and a fixed allowance for
+        // the title bar and border, which are outside the size set here and are
+        // exactly what pushes the bottom of the window past the taskbar.
+        double widthCap = Math.Min(availableWidth * 0.92, availableWidth - 24);
+        double heightCap = Math.Min(availableHeight * 0.90, availableHeight - 56);
+
+        // Only ever smaller: on a large display the declared default is the
+        // deliberate size, not a starting point to be inflated from.
+        Width = Math.Max(MinWidth, Math.Min(Width, widthCap));
+        Height = Math.Max(MinHeight, Math.Min(Height, heightCap));
+
+        // Re-centre unconditionally. A window can be entirely the right size and
+        // still hang off the bottom because the window manager cascaded it down
+        // from the last one, which is its own version of the same bug. Centred
+        // on the frame, not the client area, so the title bar and border are
+        // inside the work area too.
+        double frameWidth = (FrameSize?.Width ?? Width) * scaling;
+        double frameHeight = (FrameSize?.Height ?? Height) * scaling;
+        Position = new PixelPoint(
+            screen.WorkingArea.X + (int)Math.Max(0, (screen.WorkingArea.Width - frameWidth) / 2),
+            screen.WorkingArea.Y + (int)Math.Max(0, (screen.WorkingArea.Height - frameHeight) / 2));
+    }
 
     private T Find<T>(string name) where T : Control => this.FindControl<T>(name)!;
 
@@ -76,6 +137,120 @@ public partial class MainWindow : Window
     private static readonly FilePickerFileType BundleType = new("MsiMaker package") { Patterns = ["*.msimaker"] };
     private static readonly FilePickerFileType ProjectType = new("MsiMaker project") { Patterns = ["*.json"] };
     private static readonly FilePickerFileType AnyType = new("All files") { Patterns = ["*"] };
+    private static readonly FilePickerFileType PfxType = new("Certificate") { Patterns = ["*.pfx", "*.p12"] };
+    private static readonly FilePickerFileType DllType = new("Signing library") { Patterns = ["*.dll"] };
+
+    // ------------------------------------------------------------- library
+
+    /// <summary>Tab order is fixed in the XAML; these are the two the library sends people to.</summary>
+    private const int PayloadTab = 1;
+    private const int IdentityTab = 2;
+
+    private void ShowTab(int index) => Find<TabControl>("MainTabs").SelectedIndex = index;
+
+    /// <summary>
+    /// Turns a recipe into the current project.
+    ///
+    /// The picker the recipe asks for matters: HP Image Assistant wants the
+    /// folder a SoftPaq was extracted into, and opening a file picker for it
+    /// sends the admin looking for an installer that does not exist.
+    /// </summary>
+    private async void OnUseRecipe(object? sender, RoutedEventArgs e)
+    {
+        if (_model.SelectedRecipe is not { } row) return;
+        Recipe recipe = row.Model;
+
+        string? payload;
+        if (row.WantsFolder)
+        {
+            var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            {
+                Title = recipe.PayloadPrompt,
+                AllowMultiple = false,
+            });
+            payload = folders.Count > 0 ? folders[0].Path.LocalPath : null;
+        }
+        else
+        {
+            var file = await PickOpen(recipe.PayloadPrompt, ExeType, AnyType);
+            payload = file?.Path.LocalPath;
+        }
+
+        if (payload is null) return;
+
+        try
+        {
+            _model.UseRecipe(recipe, payload);
+            ShowTab(IdentityTab);
+
+            // The template's version is realistic and quite possibly stale, and
+            // the ProductCode Intune detects on is derived from it, so a stale
+            // version is a package that never supersedes the one already out
+            // there. Say so here rather than leaving it in the notes.
+            string caution = recipe.Verified
+                ? ""
+                : " This recipe is untested - install and uninstall it on one device before deploying it.";
+            Status($"Loaded the {recipe.Name} recipe with {Path.GetFileName(payload.TrimEnd(Path.DirectorySeparatorChar))}. "
+                   + $"Set Version to the version you actually downloaded - the template says {row.TemplateVersion}, "
+                   + "and the ProductCode Intune detects on is derived from it." + caution);
+        }
+        catch (Exception ex)
+        {
+            Status($"Could not load the {recipe.Name} recipe: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Opens a recipe's download page. Only http and https are handed to the
+    /// shell: a recipe can come from a folder anyone on the team can write to,
+    /// and UseShellExecute on an arbitrary scheme would run whatever it names.
+    /// </summary>
+    private void OnOpenRecipeUrl(object? sender, RoutedEventArgs e)
+    {
+        if (_model.SelectedRecipe is not { CanOpenDownloadUrl: true } row) return;
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = row.DownloadUrl,
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            Status($"Could not open the download page: {ex.Message}");
+        }
+    }
+
+    private void OnOpenRecipesFolder(object? sender, RoutedEventArgs e)
+    {
+        string folder = _model.RecipeUserDirectory;
+        try
+        {
+            // Created on demand: the folder is only read at start-up, so it
+            // normally does not exist until somebody wants to put a file in it.
+            if (!Directory.Exists(folder))
+            {
+                Directory.CreateDirectory(folder);
+                Status($"Created {folder}. Recipe JSON dropped here is read the next time MsiMaker starts.");
+            }
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = folder,
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            Status($"Could not open {folder}: {ex.Message}");
+        }
+    }
+
+    private void OnStartBlank(object? sender, RoutedEventArgs e)
+    {
+        ShowTab(PayloadTab);
+        Status("Starting from nothing. Add the installer you want to wrap on the Payload tab.");
+    }
 
     // ------------------------------------------------------------- payload
 
@@ -231,8 +406,30 @@ public partial class MainWindow : Window
         if (file is not null) _model.OutputPath = file.Path.LocalPath;
     }
 
+    private async void OnPickCertificate(object? sender, RoutedEventArgs e)
+    {
+        var file = await PickOpen("Choose the certificate to sign with", PfxType, AnyType);
+        if (file is not null) _model.CertificatePath = file.Path.LocalPath;
+    }
+
+    private async void OnPickDlib(object? sender, RoutedEventArgs e)
+    {
+        var file = await PickOpen("Choose Azure.CodeSigning.Dlib.dll", DllType, AnyType);
+        if (file is not null) _model.AzureDlibPath = file.Path.LocalPath;
+    }
+
+    private void OnRecheckSigner(object? sender, RoutedEventArgs e)
+    {
+        _model.RecheckSigner();
+        Status(_model.SignerFound ? $"Signer found: {_model.SignerStatus}" : "Still no signer installed.");
+    }
+
     private void OnBuild(object? sender, RoutedEventArgs e)
     {
+        // The log is folded away until it has something to say; a build is
+        // exactly when it does, whether it succeeded or not.
+        Find<Expander>("LogExpander").IsExpanded = true;
+
         var errors = _model.Project.Validate();
         if (errors.Count > 0)
         {
@@ -263,6 +460,29 @@ public partial class MainWindow : Window
             _model.Append($"  {result.SizeBytes:N0} bytes");
             foreach (var w in result.Warnings) _model.Append($"  warning: {w}");
 
+            // Signing comes after the build and before anything is packaged
+            // around the MSI: any edit to the database invalidates the
+            // signature, and an .intunewin built first would carry the unsigned
+            // file. A failure here is reported, not thrown, so the MSI on disk
+            // is still named in the log.
+            string signedNote = "";
+            if (_model.Project.Signing.Enabled)
+            {
+                var signed = CodeSigner.Sign(result.MsiPath, _model.Project.Signing);
+                if (signed.Signed)
+                {
+                    _model.Append($"signed {result.MsiPath} with {signed.Tool}");
+                    if (!string.IsNullOrWhiteSpace(signed.Detail)) _model.Append($"  {signed.Detail}");
+                    signedNote = " Signed.";
+                }
+                else
+                {
+                    _model.Append($"SIGNING FAILED: {signed.Detail}");
+                    _model.Append("  the package was built but is not signed.");
+                    signedNote = " SIGNING FAILED - see the log.";
+                }
+            }
+
             if (_model.EmitIntuneWin)
             {
                 string intunewin = Path.ChangeExtension(result.MsiPath, ".intunewin");
@@ -278,7 +498,7 @@ public partial class MainWindow : Window
                 _model.Append($"upgrade check: {_model.Verdict}");
             }
 
-            Status($"Built {Path.GetFileName(result.MsiPath)}.");
+            Status($"Built {Path.GetFileName(result.MsiPath)}.{signedNote}");
         }
         catch (Exception ex)
         {

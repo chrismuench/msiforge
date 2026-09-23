@@ -226,6 +226,14 @@
     <Style Selector="Border.verdict.pass">
       <Setter Property="Background" Value="{DynamicResource PassBackBrush}" />
     </Style>
+    <!--
+      A third weight for the banner: an untested recipe is not a failure, but it
+      must not read as an endorsement either, so it gets the warn palette rather
+      than being demoted to a hint nobody reads.
+    -->
+    <Style Selector="Border.verdict.warn">
+      <Setter Property="Background" Value="{DynamicResource WarnBackBrush}" />
+    </Style>
     <Style Selector="TextBlock.verdicttext">
       <Setter Property="FontSize" Value="13.5" />
       <Setter Property="FontWeight" Value="SemiBold" />
@@ -234,6 +242,23 @@
     </Style>
     <Style Selector="TextBlock.verdicttext.pass">
       <Setter Property="Foreground" Value="{DynamicResource PassTextBrush}" />
+    </Style>
+    <Style Selector="TextBlock.verdicttext.warn">
+      <Setter Property="Foreground" Value="{DynamicResource WarnTextBrush}" />
+    </Style>
+
+    <!--
+      Body prose, for the one place the window has a paragraph to say rather
+      than a label: a recipe's awkwardness. Wider measure than .hint and full
+      text colour, because this is the reason the library exists.
+    -->
+    <Style Selector="TextBlock.prose">
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="LineHeight" Value="19" />
+      <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="MaxWidth" Value="680" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
     </Style>
 
     <!-- =========================================================== buttons -->
