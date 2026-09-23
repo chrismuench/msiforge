@@ -1,0 +1,236 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MsiMaker.App.ViewModels"
+        x:Class="MsiMaker.App.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Title="MsiMaker" Width="1080" Height="740" MinWidth="820" MinHeight="600">
+
+  <DockPanel>
+
+    <Border DockPanel.Dock="Top" Padding="16,12" Background="{DynamicResource SystemControlBackgroundAltHighBrush}">
+      <StackPanel Orientation="Horizontal" Spacing="14">
+        <TextBlock Text="MsiMaker" FontSize="20" FontWeight="Bold" VerticalAlignment="Center" />
+        <TextBlock Text="Build MSIs that upgrade cleanly in Intune" Opacity="0.65"
+                   VerticalAlignment="Center" />
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+          <Button Name="OpenProjectButton" Content="Open project…" />
+          <Button Name="SaveProjectButton" Content="Save project…" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+
+    <Border DockPanel.Dock="Bottom" Padding="16,8"
+            Background="{DynamicResource SystemControlBackgroundAltHighBrush}">
+      <TextBlock Name="StatusText" Text="Ready" Opacity="0.75" />
+    </Border>
+
+    <TabControl Margin="8">
+
+      <!-- ============================================ Payload -->
+      <TabItem Header="Payload">
+        <ScrollViewer>
+          <StackPanel Margin="14">
+            <TextBlock Classes="h1" Text="What are you packaging?" />
+            <TextBlock Classes="sub"
+                       Text="Add the files to install. If the payload is an installer executable, analyse it and MsiMaker will identify the framework and propose the switches that make it run silently." />
+
+            <Border Classes="card">
+              <StackPanel Spacing="10">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Button Name="AnalyseButton" Content="Analyse installer…" />
+                  <Button Name="AddFilesButton" Content="Add files…" />
+                  <Button Name="RemoveFileButton" Content="Remove selected" />
+                </StackPanel>
+
+                <Border Classes="card" IsVisible="{Binding HasAnalysis}" Margin="0,4,0,0">
+                  <StackPanel Spacing="6">
+                    <TextBlock Text="{Binding AnalysisSummary}" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding AnalysisDetail}" FontFamily="Consolas,Menlo,monospace"
+                               FontSize="11" TextWrapping="Wrap" />
+                  </StackPanel>
+                </Border>
+
+                <DataGrid Name="FilesGrid" ItemsSource="{Binding Files}" Height="220"
+                          IsReadOnly="True" GridLinesVisibility="Horizontal" />
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <!-- ============================================ Identity -->
+      <TabItem Header="Identity">
+        <ScrollViewer>
+          <StackPanel Margin="14" MaxWidth="720" HorizontalAlignment="Left">
+            <TextBlock Classes="h1" Text="Package identity" />
+            <TextBlock Classes="sub"
+                       Text="These four values decide whether Intune upgrades your app or quietly ignores it. MsiMaker manages the ProductCode for you." />
+
+            <Border Classes="card">
+              <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+
+                <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Product name" Margin="0,6,12,0" />
+                <TextBox  Grid.Row="0" Grid.Column="1" Text="{Binding ProductName}" Margin="0,0,0,10" />
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Manufacturer" Margin="0,6,12,0" />
+                <TextBox  Grid.Row="1" Grid.Column="1" Text="{Binding Manufacturer}" Margin="0,0,0,10" />
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Classes="label" Text="Version" Margin="0,6,12,0" />
+                <StackPanel Grid.Row="2" Grid.Column="1" Margin="0,0,0,10">
+                  <TextBox Text="{Binding Version}" />
+                  <TextBlock Classes="hint" Text="{Binding VersionNote}" />
+                </StackPanel>
+
+                <TextBlock Grid.Row="3" Grid.Column="0" Classes="label" Text="UpgradeCode" Margin="0,6,12,0" />
+                <StackPanel Grid.Row="3" Grid.Column="1" Margin="0,0,0,10">
+                  <DockPanel>
+                    <Button Name="NewUpgradeCodeButton" Content="New" DockPanel.Dock="Right" Margin="8,0,0,0" />
+                    <TextBox Text="{Binding UpgradeCode}" FontFamily="Consolas,Menlo,monospace" />
+                  </DockPanel>
+                  <TextBlock Classes="hint"
+                             Text="Stable for the lifetime of the product. Every version must carry this same value, or the old build is never removed and you end up with two entries in Programs and Features." />
+                </StackPanel>
+
+                <TextBlock Grid.Row="4" Grid.Column="0" Classes="label" Text="ProductCode" Margin="0,6,12,0" />
+                <StackPanel Grid.Row="4" Grid.Column="1" Margin="0,0,0,10">
+                  <TextBox Text="{Binding ProductCodePreview}" IsReadOnly="True"
+                           FontFamily="Consolas,Menlo,monospace" Opacity="0.8" />
+                  <TextBlock Classes="hint"
+                             Text="Derived from the UpgradeCode and version, so it changes exactly when the version changes. Intune detects on this value; a ProductCode that fails to change is the single most common reason an upgrade never happens." />
+                </StackPanel>
+
+                <TextBlock Grid.Row="5" Grid.Column="0" Classes="label" Text="Platform" Margin="0,6,12,0" />
+                <StackPanel Grid.Row="5" Grid.Column="1" Margin="0,0,0,10">
+                  <ComboBox ItemsSource="{Binding Platforms}" SelectedItem="{Binding Platform}" MinWidth="160" />
+                  <TextBlock Classes="hint"
+                             Text="Cannot change between versions of the same product. Windows Installer will not upgrade across architectures." />
+                </StackPanel>
+
+                <TextBlock Grid.Row="6" Grid.Column="0" Classes="label" Text="Install folder" Margin="0,6,12,0" />
+                <StackPanel Grid.Row="6" Grid.Column="1">
+                  <TextBox Text="{Binding InstallFolder}" Watermark="defaults to the product name" />
+                  <TextBlock Classes="hint" Text="Created under Program Files. Installs are always per-machine, because Intune runs as SYSTEM." />
+                </StackPanel>
+              </Grid>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <!-- ============================================ Run -->
+      <TabItem Header="Run">
+        <ScrollViewer>
+          <StackPanel Margin="14">
+            <TextBlock Classes="h1" Text="Commands to run" />
+            <TextBlock Classes="sub"
+                       Text="Executables the package runs during install or uninstall. Each runs deferred and without impersonation, so it executes as SYSTEM with the payload already on disk." />
+
+            <Border Classes="card">
+              <StackPanel Spacing="10">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Button Name="AddRunButton" Content="Add command" />
+                  <Button Name="RemoveRunButton" Content="Remove selected" />
+                </StackPanel>
+                <DataGrid Name="RunGrid" ItemsSource="{Binding Run}" Height="260"
+                          GridLinesVisibility="Horizontal" AutoGenerateColumns="False">
+                  <DataGrid.Columns>
+                    <DataGridTextColumn Header="Executable" Binding="{Binding ExePath}" Width="220" />
+                    <DataGridTextColumn Header="Arguments" Binding="{Binding Arguments}" Width="*" />
+                    <DataGridCheckBoxColumn Header="Ignore exit code" Binding="{Binding IgnoreExitCode}" Width="130" />
+                  </DataGrid.Columns>
+                </DataGrid>
+                <TextBlock Classes="hint"
+                           Text="Paths are relative to the install folder. An installer run this way is not tracked by Windows Installer, so uninstalling the MSI removes the payload but not whatever that installer wrote elsewhere - add an uninstall command for that." />
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <!-- ============================================ Upgrade check -->
+      <TabItem Header="Upgrade check">
+        <ScrollViewer>
+          <StackPanel Margin="14">
+            <TextBlock Classes="h1" Text="Will Intune actually upgrade?" />
+            <TextBlock Classes="sub"
+                       Text="Compare a built package against the version already deployed. Every reason an Intune upgrade silently fails is visible in the two files before anything is deployed." />
+
+            <Border Classes="card">
+              <StackPanel Spacing="10">
+                <DockPanel>
+                  <Button Name="PickPreviousButton" Content="Previously shipped MSI…" DockPanel.Dock="Right" Margin="8,0,0,0" />
+                  <TextBox Text="{Binding PreviousMsi}" Watermark="path to the MSI currently deployed" />
+                </DockPanel>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Button Name="RunCheckButton" Content="Check against current build" />
+                  <Button Name="PickCandidateButton" Content="…or pick a candidate MSI" />
+                </StackPanel>
+
+                <Border Background="{DynamicResource SystemControlBackgroundBaseLowBrush}"
+                        CornerRadius="4" Padding="10" IsVisible="{Binding Verdict, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                  <TextBlock Text="{Binding Verdict}" FontWeight="Bold" FontSize="14"
+                             Foreground="{Binding VerdictColour}" TextWrapping="Wrap" />
+                </Border>
+
+                <DataGrid ItemsSource="{Binding Checks}" Height="300" IsReadOnly="True"
+                          GridLinesVisibility="Horizontal" AutoGenerateColumns="False">
+                  <DataGrid.Columns>
+                    <DataGridTextColumn Header="" Binding="{Binding Mark}" Width="64" FontWeight="Bold" />
+                    <DataGridTextColumn Header="Check" Binding="{Binding Name}" Width="190" />
+                    <DataGridTextColumn Header="Detail" Binding="{Binding Detail}" Width="*" />
+                  </DataGrid.Columns>
+                </DataGrid>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <!-- ============================================ Build -->
+      <TabItem Header="Build">
+        <ScrollViewer>
+          <StackPanel Margin="14">
+            <TextBlock Classes="h1" Text="Build" />
+            <TextBlock Classes="sub" Text="The MSI is always produced. Everything else is optional." />
+
+            <Border Classes="card">
+              <StackPanel Spacing="10">
+                <DockPanel>
+                  <Button Name="PickOutputButton" Content="Output…" DockPanel.Dock="Right" Margin="8,0,0,0" />
+                  <TextBox Text="{Binding OutputPath}" Watermark="where to write the .msi" />
+                </DockPanel>
+
+                <CheckBox IsChecked="{Binding EmitIntuneWin}" Content="Also produce a Win32 .intunewin package" />
+                <TextBlock Classes="hint" Margin="26,0,0,6"
+                           Text="Not needed just to deploy an MSI: Intune reads the ProductCode itself and a line-of-business MSI upgrades on GUID and version alone. Choose this when you need something LOB MSI cannot do - supersedence, dependencies, requirement rules, a custom command line, or detection beyond the ProductCode." />
+                <TextBlock Classes="hint" Margin="26,0,0,6" FontWeight="SemiBold"
+                           Text="Required for ring-based rollout: Intune deployment plans accept only Windows app (Win32) and Enterprise App Catalog payloads. A line-of-business MSI cannot be used in a deployment, and only the Required install intent is supported." />
+
+                <CheckBox IsChecked="{Binding UploadToIntune}" Content="Upload to Intune after building" />
+                <TextBlock Classes="hint" Margin="26,0,0,6"
+                           Text="Signs in with device code and creates or updates the app in your tenant." />
+
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0">
+                  <Button Name="BuildButton" Content="Build" IsEnabled="{Binding CanBuild}"
+                          Padding="22,7" FontWeight="SemiBold" />
+                  <Button Name="OpenOutputButton" Content="Show output folder" />
+                </StackPanel>
+              </StackPanel>
+            </Border>
+
+            <Border Classes="card">
+              <StackPanel>
+                <TextBlock Classes="label" Text="Log" />
+                <TextBox Text="{Binding Log}" IsReadOnly="True" AcceptsReturn="True"
+                         Height="240" FontFamily="Consolas,Menlo,monospace" FontSize="11"
+                         TextWrapping="NoWrap"
+                         HorizontalAlignment="Stretch" VerticalContentAlignment="Top" />
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+    </TabControl>
+  </DockPanel>
+</Window>

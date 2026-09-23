@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/MsiMaker.App/MsiMaker.App.csproj" />
     <Project Path="src/MsiMaker.Cli/MsiMaker.Cli.csproj" />
     <Project Path="src/MsiMaker.Core/MsiMaker.Core.csproj" />
   </Folder>
