@@ -1,6 +1,8 @@
 using MsiMaker.Core.Build;
+using MsiMaker.Core.Intune;
 using MsiMaker.Core.Model;
 using MsiMaker.Core.Msi;
+using MsiMaker.Core.Payload;
 
 if (args.Length == 0)
 {
@@ -8,6 +10,9 @@ if (args.Length == 0)
         msimaker - cross-platform MSI builder
 
           build     <project.json> [out.msi]   Build an MSI from a project
+          analyze   <installer.exe> [proj.json] Identify the installer and its silent switches
+          upgrade   <old.msi> <new.msi>        Will Intune actually upgrade? Check before shipping
+          intunewin <file.msi> [out]           Wrap an MSI as a Win32 .intunewin package
           inspect   <file.msi>                 Show identity, upgrade and table summary
           roundtrip <file.msi> <out.msi>       Read, rewrite and verify table fidelity
         """);
@@ -21,6 +26,9 @@ try
         case "mktest": return MakeMinimal(args[1]);
         case "subset": return Subset(args[1], args[2], args[3..]);
         case "build": return BuildProject(args[1], args.Length > 2 ? args[2] : null);
+        case "analyze": return Analyze(args[1], args.Length > 2 ? args[2] : null);
+        case "upgrade": return UpgradeCheck(args[1], args[2]);
+        case "intunewin": return MakeIntuneWin(args[1], args.Length > 2 ? args[2] : null);
         case "inspect": return Inspect(args[1]);
         case "roundtrip": return RoundTrip(args[1], args[2]);
         default:
@@ -32,6 +40,71 @@ catch (Exception ex)
 {
     Console.Error.WriteLine($"error: {ex.Message}");
     return 1;
+}
+
+static int Analyze(string path, string? projectOut)
+{
+    var a = InstallerDetective.Analyse(path);
+    Console.WriteLine($"File          {Path.GetFileName(a.Path)}  ({new FileInfo(a.Path).Length:N0} bytes)");
+    Console.WriteLine($"Installer     {a.KindName}   (confidence {a.Confidence}%)");
+    Console.WriteLine($"Architecture  {a.Architecture}");
+    if (a.Version is not null)
+    {
+        Console.WriteLine($"Company       {a.Version.CompanyName ?? "-"}");
+        Console.WriteLine($"Product       {a.Version.ProductName ?? "-"}");
+        Console.WriteLine($"Version       file={a.Version.FileVersion ?? "-"}  product={a.Version.ProductVersion ?? "-"}");
+        Console.WriteLine($"  -> MSI       {InstallerDetective.NormaliseVersion(a.Version.ProductVersion ?? a.Version.FileVersion)}  (three fields; the rest is ignored on upgrade)");
+    }
+    Console.WriteLine();
+    Console.WriteLine($"Silent        {a.SilentArguments ?? "(unknown)"}");
+    if (a.SilentArgumentsWithDirectory is not null)
+        Console.WriteLine($"With dir      {a.SilentArgumentsWithDirectory}");
+    if (a.UninstallHint is not null)
+        Console.WriteLine($"Uninstall     {a.UninstallHint}");
+
+    Console.WriteLine();
+    foreach (var e in a.Evidence) Console.WriteLine($"  evidence: {e}");
+    foreach (var w in a.Warnings) Console.WriteLine($"  warning:  {w}");
+
+    if (projectOut is not null)
+    {
+        var project = InstallerDetective.ToProject(a);
+        project.Save(projectOut);
+        Console.WriteLine();
+        Console.WriteLine($"wrote starter project {projectOut} (UpgradeCode {DeterministicGuid.Format(project.UpgradeCode)} - keep it stable forever)");
+    }
+    return 0;
+}
+
+static int MakeIntuneWin(string msiPath, string? output)
+{
+    output ??= Path.ChangeExtension(msiPath, ".intunewin");
+    var r = IntuneWinPackager.PackageMsi(msiPath, output);
+    Console.WriteLine($"wrote {r.Path}");
+    Console.WriteLine($"  setup file  {r.SetupFile}");
+    Console.WriteLine($"  payload     {r.PlainSize:N0} bytes -> {r.EncryptedSize:N0} encrypted");
+    Console.WriteLine($"  detection   MSI ProductCode rule (no script needed)");
+    return 0;
+}
+
+static int UpgradeCheck(string previous, string candidate)
+{
+    var report = UpgradeDoctor.Compare(previous, candidate);
+    Console.WriteLine($"{Path.GetFileName(previous)}  ->  {Path.GetFileName(candidate)}");
+    Console.WriteLine();
+    foreach (var c in report.Checks)
+    {
+        string mark = c.Status switch
+        {
+            CheckStatus.Pass => "OK  ",
+            CheckStatus.Warn => "WARN",
+            _ => "FAIL",
+        };
+        Console.WriteLine($"  [{mark}] {c.Name,-24} {c.Detail}");
+    }
+    Console.WriteLine();
+    Console.WriteLine($"  => {report.Summary}");
+    return report.Verdict == UpgradeVerdict.UpgradesInPlace ? 0 : 1;
 }
 
 /// <summary>
