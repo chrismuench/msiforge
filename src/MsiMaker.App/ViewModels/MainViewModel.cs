@@ -336,6 +336,12 @@ public sealed class MainViewModel : ObservableObject
     public void LoadProject(MsiProject project)
     {
         _project = project;
+
+        // Folder payloads are expanded at build time, so without this a project
+        // that installs a directory - an extracted SoftPaq, say - opens looking
+        // as though it has no payload at all.
+        _project.ExpandFolders();
+
         Files.Clear();
         foreach (var f in project.Files) Files.Add(new FileRow(f));
         Run.Clear();

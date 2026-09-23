@@ -13,6 +13,24 @@ public partial class MainWindow : Window
     private readonly MainViewModel _model = new();
     private string? _lastBuiltMsi;
 
+    /// <summary>
+    /// Opens with a project already loaded, so a .json can be double-clicked or
+    /// passed on the command line rather than opened through the dialog.
+    /// </summary>
+    public MainWindow(string? projectPath) : this()
+    {
+        if (string.IsNullOrWhiteSpace(projectPath) || !File.Exists(projectPath)) return;
+        try
+        {
+            _model.LoadProject(ProjectBundle.LoadAny(projectPath));
+            Status($"Opened {Path.GetFileName(projectPath)}.");
+        }
+        catch (Exception ex)
+        {
+            Status($"Could not open {Path.GetFileName(projectPath)}: {ex.Message}");
+        }
+    }
+
     public MainWindow()
     {
         InitializeComponent();
@@ -55,6 +73,7 @@ public partial class MainWindow : Window
 
     private static readonly FilePickerFileType ExeType = new("Installers") { Patterns = ["*.exe", "*.msi"] };
     private static readonly FilePickerFileType MsiType = new("Windows Installer") { Patterns = ["*.msi"] };
+    private static readonly FilePickerFileType BundleType = new("MsiMaker package") { Patterns = ["*.msimaker"] };
     private static readonly FilePickerFileType ProjectType = new("MsiMaker project") { Patterns = ["*.json"] };
     private static readonly FilePickerFileType AnyType = new("All files") { Patterns = ["*"] };
 
@@ -296,11 +315,11 @@ public partial class MainWindow : Window
 
     private async void OnOpenProject(object? sender, RoutedEventArgs e)
     {
-        var file = await PickOpen("Open a MsiMaker project", ProjectType);
+        var file = await PickOpen("Open a MsiMaker package or project", BundleType, ProjectType);
         if (file is null) return;
         try
         {
-            _model.LoadProject(MsiProject.Load(file.Path.LocalPath));
+            _model.LoadProject(ProjectBundle.LoadAny(file.Path.LocalPath));
             Status($"Opened {file.Name}.");
         }
         catch (Exception ex)
@@ -313,16 +332,27 @@ public partial class MainWindow : Window
     {
         var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
-            Title = "Save project",
-            SuggestedFileName = $"{MsiProject.Sanitize(_model.ProductName)}.json",
-            DefaultExtension = "json",
-            FileTypeChoices = [ProjectType],
+            Title = "Save package",
+            SuggestedFileName = $"{MsiProject.Sanitize(_model.ProductName)}{ProjectBundle.Extension}",
+            DefaultExtension = ProjectBundle.Extension.TrimStart('.'),
+            FileTypeChoices = [BundleType, ProjectType],
         });
         if (file is null) return;
         try
         {
-            _model.Project.Save(file.Path.LocalPath);
-            Status($"Saved {file.Name}. The UpgradeCode lives in this file - keep it in source control.");
+            string path = file.Path.LocalPath;
+            if (ProjectBundle.IsBundle(path))
+            {
+                var info = ProjectBundle.Save(_model.Project, path);
+                Status($"Saved {file.Name} - {info.FileCount:N0} payload file(s) included, "
+                       + $"{info.PackedBytes:N0} bytes. Version this one file.");
+            }
+            else
+            {
+                _model.Project.Save(path);
+                Status($"Saved {file.Name}. This references payload files by path; "
+                       + "save as .msimaker to bundle them in.");
+            }
         }
         catch (Exception ex)
         {

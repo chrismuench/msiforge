@@ -11,7 +11,8 @@ if (args.Length == 0)
     Console.WriteLine("""
         msimaker - cross-platform MSI builder
 
-          build     <project.json> [out.msi]   Build an MSI from a project
+          build     <project|bundle> [out.msi] Build an MSI from a project or .msimaker bundle
+          pack      <project.json> [out]       Bundle a project and its payload into one file
           analyze   <installer.exe> [proj.json] Identify the installer and its silent switches
           recipes                              List the built-in recipes for awkward applications
           recipe    <id> <out.json> [payload]  Write a starting project from a recipe
@@ -33,6 +34,7 @@ try
         case "taskxml": return ShowTaskXml(args[1]);
         case "subset": return Subset(args[1], args[2], args[3..]);
         case "build": return BuildProject(args[1], args.Length > 2 ? args[2] : null);
+        case "pack": return PackProject(args[1], args.Length > 2 ? args[2] : null);
         case "analyze": return Analyze(args[1], args.Length > 2 ? args[2] : null);
         case "recipes": return ListRecipes();
         case "recipe": return WriteRecipe(args[1], args[2], args.Length > 3 ? args[3] : null);
@@ -300,18 +302,26 @@ static int MakeMinimal(string output)
     return 0;
 }
 
-static int BuildProject(string projectPath, string? outputPath)
+static int PackProject(string projectPath, string? output)
 {
     var project = MsiProject.Load(projectPath);
+    output ??= Path.ChangeExtension(projectPath, ProjectBundle.Extension);
 
-    // Relative payload paths are resolved against the project file, not the cwd.
+    var info = ProjectBundle.Save(project, output);
+    Console.WriteLine($"packed {info.Path}");
+    Console.WriteLine($"  {info.FileCount:N0} payload file(s), {info.PayloadBytes:N0} bytes");
+    Console.WriteLine($"  bundle {info.PackedBytes:N0} bytes");
+    Console.WriteLine("  self-contained: version this one file and the package is reproducible.");
+    return 0;
+}
+
+static int BuildProject(string projectPath, string? outputPath)
+{
+    var project = ProjectBundle.LoadAny(projectPath);
+
+    // MsiProject.Load already resolves relative payload paths against the
+    // project file's folder.
     string baseDir = Path.GetDirectoryName(Path.GetFullPath(projectPath))!;
-    foreach (var f in project.Files)
-        if (!Path.IsPathRooted(f.SourcePath))
-            f.SourcePath = Path.GetFullPath(Path.Combine(baseDir, f.SourcePath));
-    foreach (var d in project.Folders)
-        if (!Path.IsPathRooted(d.SourceDir))
-            d.SourceDir = Path.GetFullPath(Path.Combine(baseDir, d.SourceDir));
 
     outputPath ??= Path.Combine(baseDir, "out",
         $"{MsiProject.Sanitize(project.ProductName)}-{project.ComparableVersion}.msi");

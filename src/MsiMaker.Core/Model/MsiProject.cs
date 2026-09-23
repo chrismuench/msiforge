@@ -240,7 +240,31 @@ public sealed class MsiProject
 
     public void Save(string path) => File.WriteAllText(path, ToJson());
 
-    public static MsiProject Load(string path) => FromJson(File.ReadAllText(path));
+    /// <summary>
+    /// Loads a project and resolves every relative payload path against the
+    /// project file's own folder, which is what the author meant. Resolving
+    /// against the process working directory instead makes a project behave
+    /// differently depending on where it was opened from.
+    /// </summary>
+    public static MsiProject Load(string path)
+    {
+        string full = Path.GetFullPath(path);
+        var project = FromJson(File.ReadAllText(full));
+        project.ResolvePathsAgainst(Path.GetDirectoryName(full)!);
+        return project;
+    }
+
+    /// <summary>Makes every relative payload path absolute, relative to <paramref name="baseDir"/>.</summary>
+    public void ResolvePathsAgainst(string baseDir)
+    {
+        foreach (var file in Files)
+            if (!Path.IsPathRooted(file.SourcePath))
+                file.SourcePath = Path.GetFullPath(Path.Combine(baseDir, file.SourcePath));
+
+        foreach (var folder in Folders)
+            if (!Path.IsPathRooted(folder.SourceDir))
+                folder.SourceDir = Path.GetFullPath(Path.Combine(baseDir, folder.SourceDir));
+    }
 
     /// <summary>
     /// Folds every <see cref="Folders"/> entry into <see cref="Files"/>. Safe to

@@ -4,3 +4,4 @@ out/
 *.user
 .vs/
 .idea/
+dist/

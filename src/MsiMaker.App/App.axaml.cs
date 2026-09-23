@@ -12,7 +12,11 @@ public partial class App : Application
     public override void OnFrameworkInitializationCompleted()
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
-            desktop.MainWindow = new MainWindow();
+        {
+            string? project = desktop.Args?.FirstOrDefault(a =>
+                a.EndsWith(".json", StringComparison.OrdinalIgnoreCase));
+            desktop.MainWindow = new MainWindow(project);
+        }
         base.OnFrameworkInitializationCompleted();
     }
 }
