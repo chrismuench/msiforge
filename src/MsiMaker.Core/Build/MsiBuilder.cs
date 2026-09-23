@@ -29,6 +29,14 @@ public static class MsiBuilder
     private const int CaExeFromFile = 18;
     private const int CaExeInDirectory = 34;
     private const int CaIgnoreReturn = 64;
+
+    /// <summary>
+    /// msidbCustomActionTypeRollback. A rollback action runs only when the
+    /// install fails, and must be scheduled immediately ahead of the deferred
+    /// action it undoes - rollback actions execute in reverse order.
+    /// </summary>
+    private const int CaRollback = 256;
+
     private const int CaDeferred = 1024;
     private const int CaNoImpersonate = 2048;
 
@@ -312,12 +320,19 @@ public static class MsiBuilder
         }
 
         // SystemFolder is the 32-bit system directory (SysWOW64 on x64); the
-        // native one is System64Folder.
+        // native one is System64Folder. Added on demand, since a package with no
+        // tasks and no shell commands has no use for it.
         string systemDirId = is64 ? "System64Folder" : "SystemFolder";
         string powershellDirId = "d_powershell_v1_0";
-        if (taskFiles.Count > 0)
+
+        void EnsureSystemDirectory()
         {
             if (identifiers.Add(systemDirId)) directory.Add(systemDirId, "TARGETDIR", ".");
+        }
+
+        if (taskFiles.Count > 0)
+        {
+            EnsureSystemDirectory();
             if (identifiers.Add("d_windowspowershell"))
                 directory.Add("d_windowspowershell", systemDirId, "WindowsPowerShell");
             if (identifiers.Add(powershellDirId))
@@ -326,12 +341,65 @@ public static class MsiBuilder
 
         // -------------------------------------------------------- run actions
         var installSequence = db.Std("InstallExecuteSequence");
+
+        // Closing applications has to happen before anything touches a file,
+        // which means before RemoveExistingProducts removes the old build. The
+        // only free slot after InstallInitialize (1500) is 1501, so when there
+        // are processes to close, RemoveExistingProducts moves to 1502.
+        var processesToClose = project.CloseProcesses
+            .Select(p => p.Trim())
+            .Where(p => p.Length > 0)
+            .Select(p => p.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? p : p + ".exe")
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        // RemoveExistingProducts must be the first thing in the execution script,
+        // so nothing deferred may precede it: Windows Installer rejects that with
+        // error 2613, "RemoveExistingProducts action sequenced incorrectly".
+        // Closing applications therefore happens twice, and both are cheap:
+        //   - immediately, before InstallInitialize, which frees files ahead of
+        //     the old build being removed during an upgrade;
+        //   - deferred, after RemoveExistingProducts, which runs elevated and so
+        //     still works when the immediate pass could not.
+        const int immediateCloseSequence = 1490;   // after InstallValidate (1400)
+        const int deferredCloseSequence = 1550;    // after RemoveExistingProducts (1501)
+
         foreach (var (action, condition, seq) in MsiSchema.Sequences["InstallExecuteSequence"])
             installSequence.Add(action, condition, seq);
         foreach (var table in new[] { "InstallUISequence", "AdminExecuteSequence", "AdminUISequence", "AdvtExecuteSequence" })
         {
             var t = db.Std(table);
             foreach (var (action, condition, seq) in MsiSchema.Sequences[table]) t.Add(action, condition, seq);
+        }
+
+        if (processesToClose.Count > 0)
+        {
+            EnsureSystemDirectory();
+            var closeActions = db.Std("CustomAction");
+            int immediateSlot = immediateCloseSequence;
+            int deferredSlot = deferredCloseSequence;
+
+            foreach (string image in processesToClose)
+            {
+                // No condition: files must be free on install, upgrade and
+                // uninstall alike. The return code is ignored because taskkill
+                // reports failure when the process simply is not running.
+                string command = $"taskkill.exe /F /T /IM \"{image}\"";
+
+                string immediate = UniqueId($"ca_close_{image}", identifiers);
+                closeActions.Add(immediate,
+                    CaExeInDirectory | CaIgnoreReturn,
+                    systemDirId, command, null);
+                installSequence.Add(immediate, null, immediateSlot);
+                immediateSlot++;
+
+                string deferred = UniqueId($"ca_close_deferred_{image}", identifiers);
+                closeActions.Add(deferred,
+                    CaExeInDirectory | CaDeferred | CaNoImpersonate | CaIgnoreReturn,
+                    systemDirId, command, null);
+                installSequence.Add(deferred, null, deferredSlot);
+                deferredSlot++;
+            }
         }
 
         if (project.Run.Count > 0)
@@ -342,26 +410,92 @@ public static class MsiBuilder
 
             foreach (var run in project.Run)
             {
-                string exePath = run.ExePath.Replace('\\', '/').TrimStart('/');
-                if (!fileIdByTarget.TryGetValue(exePath, out string? exeFileId))
+                // Two shapes: an executable this package installs (resolved
+                // through the File table), or a shell command for something it
+                // did not - typically a vendor uninstaller left behind by a
+                // wrapped installer, which the MSI otherwise cannot remove.
+                bool isCommand = !string.IsNullOrWhiteSpace(run.Command);
+                string source;
+                string target;
+                int baseType;
+
+                // The undo may be a different program from the action - a wrapped
+                // installer is undone by the vendor's uninstaller - so the
+                // rollback gets its own source and type.
+                bool rollbackIsCommand = !string.IsNullOrWhiteSpace(run.RollbackCommand);
+                string rollbackSource;
+                string rollbackTarget;
+                int rollbackBaseType;
+
+                if (isCommand)
                 {
-                    warnings.Add($"Run action '{run.Id}' targets '{run.ExePath}', which is not in the payload; skipped.");
-                    continue;
+                    EnsureSystemDirectory();
+                    source = systemDirId;
+                    target = "cmd.exe /c " + run.Command;
+                    baseType = CaExeInDirectory;
+                }
+                else
+                {
+                    string exePath = run.ExePath!.Replace('\\', '/').TrimStart('/');
+                    if (!fileIdByTarget.TryGetValue(exePath, out string? exeFileId))
+                    {
+                        warnings.Add($"Run action '{run.Id}' targets '{run.ExePath}', which is not in the payload; skipped.");
+                        continue;
+                    }
+                    source = exeFileId;
+                    target = run.Arguments;
+                    baseType = CaExeFromFile;
                 }
 
-                int type = CaExeFromFile | CaDeferred | CaNoImpersonate | (run.IgnoreExitCode ? CaIgnoreReturn : 0);
+                if (rollbackIsCommand)
+                {
+                    EnsureSystemDirectory();
+                    rollbackSource = systemDirId;
+                    rollbackTarget = "cmd.exe /c " + run.RollbackCommand;
+                    rollbackBaseType = CaExeInDirectory;
+                }
+                else
+                {
+                    rollbackSource = source;
+                    rollbackTarget = isCommand
+                        ? "cmd.exe /c " + run.RollbackArguments
+                        : run.RollbackArguments ?? "";
+                    rollbackBaseType = baseType;
+                }
+
+                int type = baseType | CaDeferred | CaNoImpersonate | (run.IgnoreExitCode ? CaIgnoreReturn : 0);
 
                 if (run.When is RunWhen.Install or RunWhen.Both)
                 {
+                    string condition = Combine(run.Condition, "NOT REMOVE")!;
+
+                    // The rollback must sit immediately ahead of the action it
+                    // undoes; rollback actions replay in reverse order.
+                    if (run.HasRollback)
+                    {
+                        string rollbackId = UniqueId($"ca_{run.Id}_rollback", identifiers);
+                        customAction.Add(rollbackId,
+                            rollbackBaseType | CaRollback | CaDeferred | CaNoImpersonate | CaIgnoreReturn,
+                            rollbackSource, rollbackTarget, null);
+                        installSequence.Add(rollbackId, condition, installSlot);
+                        installSlot += 1;
+                    }
+                    else
+                    {
+                        warnings.Add($"Run action '{run.Id}' has no rollback. If the install fails "
+                                     + "after it runs, whatever it did is left behind. Set "
+                                     + "RollbackCommand or RollbackArguments.");
+                    }
+
                     string id = UniqueId($"ca_{run.Id}_install", identifiers);
-                    customAction.Add(id, type, exeFileId, run.Arguments, null);
-                    installSequence.Add(id, Combine(run.Condition, "NOT REMOVE"), installSlot);
+                    customAction.Add(id, type, source, target, null);
+                    installSequence.Add(id, condition, installSlot);
                     installSlot += 10;
                 }
                 if (run.When is RunWhen.Uninstall or RunWhen.Both)
                 {
                     string id = UniqueId($"ca_{run.Id}_uninstall", identifiers);
-                    customAction.Add(id, type, exeFileId, run.Arguments, null);
+                    customAction.Add(id, type, source, target, null);
                     installSequence.Add(id, Combine(run.Condition, "REMOVE~=\"ALL\""), uninstallSlot);
                     uninstallSlot += 10;
                 }
@@ -376,6 +510,18 @@ public static class MsiBuilder
 
             foreach (var (task, taskFileId) in taskFiles)
             {
+                // Rollback first: if the install fails after the task is
+                // registered, the task must not survive. It sits immediately
+                // ahead of the create action, since rollback replays backwards.
+                string undo = UniqueId($"ca_task_rollback_{task.Name}", identifiers);
+                customAction.Add(undo,
+                    CaExeInDirectory | CaRollback | CaDeferred | CaNoImpersonate | CaIgnoreReturn,
+                    systemDirId,
+                    $"schtasks.exe /Delete /TN \"{task.FullName}\" /F",
+                    null);
+                installSequence.Add(undo, "NOT REMOVE", createSlot);
+                createSlot += 1;
+
                 string create = UniqueId($"ca_task_create_{task.Name}", identifiers);
                 customAction.Add(create,
                     CaExeInDirectory | CaDeferred | CaNoImpersonate,

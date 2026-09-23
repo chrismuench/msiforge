@@ -1,0 +1,48 @@
+{
+  "Id": "notepad-plus-plus",
+  "Name": "Notepad++",
+  "Vendor": "Notepad++ Team",
+  "Description": "The vendor's NSIS installer, wrapped with the vendor uninstaller wired to uninstall and to rollback.",
+  "Awkwardness": "The whole difficulty is one NSIS quirk: /D= must be the last switch on the line and must not be quoted, even when the target path contains spaces. /S /D=\"C:\\Program Files\\Notepad++\" looks correct, is accepted without complaint, and installs to the default location anyway - so a fleet ends up with the application somewhere other than where the detection rule looks. Notepad++ also releases often enough that the wrapped installer's file name changes constantly, and the 32-bit and 64-bit downloads are named almost identically, so the wrong one lands in Program Files (x86) and every path-based rule written for it misses.",
+  "DownloadUrl": "https://notepad-plus-plus.org/downloads/",
+  "SetupFileHint": "npp.X.Y.Z.Installer.x64.exe - check you took the x64 build, not the x86 one.",
+  "Verified": false,
+  "Notes": [
+    "NOT tested in this repository. /S for NSIS is about as well established as a silent switch gets, but nothing here has been run against a real device.",
+    "Run 'msimaker analyze <installer>' against your download to confirm the NSIS fingerprint.",
+    "/D= is deliberately unquoted. Do not add quotes: NSIS takes the rest of the line verbatim and quoting it silently breaks the switch.",
+    "The uninstall command assumes the vendor uninstaller is uninstall.exe in the install folder. Confirm the file name on a test device before relying on it - an uninstall action pointing at a file that does not exist is a package that cannot be removed.",
+    "Set Version to the Notepad++ version you downloaded."
+  ],
+  "Project": {
+    "ProductName": "Notepad++",
+    "Manufacturer": "Notepad++ Team",
+    "Version": "8.7.1",
+    "UpgradeCode": "a2e88a25-e4d8-4168-93a0-22e53dad83f2",
+    "Platform": "X64",
+    "InstallFolder": "Notepad++ Wrapper",
+    "Files": [
+      { "SourcePath": "{payload}", "TargetPath": "setup.exe" }
+    ],
+    "Run": [
+      {
+        "Id": "install",
+        "ExePath": "setup.exe",
+        "Arguments": "/S /D=C:\\Program Files\\Notepad++",
+        "When": "Install",
+        "RollbackCommand": "\"C:\\Program Files\\Notepad++\\uninstall.exe\" /S"
+      },
+      {
+        "Id": "uninstall",
+        "Command": "\"C:\\Program Files\\Notepad++\\uninstall.exe\" /S",
+        "When": "Uninstall",
+        "IgnoreExitCode": true
+      }
+    ],
+    "CloseProcesses": ["notepad++.exe"],
+    "Arp": {
+      "AboutUrl": "https://notepad-plus-plus.org/",
+      "Comments": "Notepad++ wrapped as an MSI. Silent switches from vendor documentation, untested."
+    }
+  }
+}

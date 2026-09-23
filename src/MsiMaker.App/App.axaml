@@ -2,37 +2,406 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="MsiMaker.App.App"
              RequestedThemeVariant="Default">
+
+  <!--
+    One palette, defined once per theme variant. Every brush below has a
+    counterpart in the other dictionary, so nothing goes invisible when the
+    machine is set to dark mode - which on a managed fleet is common.
+  -->
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="AppSurfaceBrush"    Color="#F3F4F6" />
+          <SolidColorBrush x:Key="ChromeBrush"        Color="#FFFFFF" />
+          <SolidColorBrush x:Key="CardBrush"          Color="#FFFFFF" />
+          <SolidColorBrush x:Key="SunkenBrush"        Color="#F7F8FA" />
+          <SolidColorBrush x:Key="BorderSubtleBrush"  Color="#E2E5EA" />
+          <SolidColorBrush x:Key="BorderStrongBrush"  Color="#C8CDD5" />
+          <SolidColorBrush x:Key="TextPrimaryBrush"   Color="#1A1D21" />
+          <SolidColorBrush x:Key="TextSecondaryBrush" Color="#586170" />
+          <SolidColorBrush x:Key="TextMutedBrush"     Color="#7B8492" />
+          <SolidColorBrush x:Key="AccentBrush"        Color="#1F5FA9" />
+          <SolidColorBrush x:Key="AccentHoverBrush"   Color="#276FBE" />
+          <SolidColorBrush x:Key="AccentPressBrush"   Color="#174B87" />
+          <SolidColorBrush x:Key="AccentTextBrush"    Color="#FFFFFF" />
+          <SolidColorBrush x:Key="PassBackBrush"      Color="#E3F1E5" />
+          <SolidColorBrush x:Key="PassTextBrush"      Color="#1D6B2C" />
+          <SolidColorBrush x:Key="WarnBackBrush"      Color="#FBEED6" />
+          <SolidColorBrush x:Key="WarnTextBrush"      Color="#8A5700" />
+          <SolidColorBrush x:Key="FailBackBrush"      Color="#FBE2E2" />
+          <SolidColorBrush x:Key="FailTextBrush"      Color="#A22121" />
+        </ResourceDictionary>
+
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="AppSurfaceBrush"    Color="#15181C" />
+          <SolidColorBrush x:Key="ChromeBrush"        Color="#1A1E23" />
+          <SolidColorBrush x:Key="CardBrush"          Color="#1E232A" />
+          <SolidColorBrush x:Key="SunkenBrush"        Color="#171B20" />
+          <SolidColorBrush x:Key="BorderSubtleBrush"  Color="#2D333B" />
+          <SolidColorBrush x:Key="BorderStrongBrush"  Color="#3D454F" />
+          <SolidColorBrush x:Key="TextPrimaryBrush"   Color="#E7ECF2" />
+          <SolidColorBrush x:Key="TextSecondaryBrush" Color="#A4AFBC" />
+          <SolidColorBrush x:Key="TextMutedBrush"     Color="#8A95A3" />
+          <SolidColorBrush x:Key="AccentBrush"        Color="#4C93E0" />
+          <SolidColorBrush x:Key="AccentHoverBrush"   Color="#63A2E8" />
+          <SolidColorBrush x:Key="AccentPressBrush"   Color="#3C7FC7" />
+          <SolidColorBrush x:Key="AccentTextBrush"    Color="#0D1116" />
+          <SolidColorBrush x:Key="PassBackBrush"      Color="#1B3624" />
+          <SolidColorBrush x:Key="PassTextBrush"      Color="#7ED894" />
+          <SolidColorBrush x:Key="WarnBackBrush"      Color="#3A2E14" />
+          <SolidColorBrush x:Key="WarnTextBrush"      Color="#E9C06C" />
+          <SolidColorBrush x:Key="FailBackBrush"      Color="#3B1E1E" />
+          <SolidColorBrush x:Key="FailTextBrush"      Color="#F09A9A" />
+        </ResourceDictionary>
+
+      </ResourceDictionary.ThemeDictionaries>
+
+      <!-- Spacing scale. Everything in the window is a multiple of 4. -->
+      <x:Double x:Key="SpaceXs">4</x:Double>
+      <x:Double x:Key="SpaceSm">8</x:Double>
+      <x:Double x:Key="SpaceMd">12</x:Double>
+      <x:Double x:Key="SpaceLg">16</x:Double>
+      <x:Double x:Key="SpaceXl">24</x:Double>
+
+      <Thickness x:Key="CardPadding">16</Thickness>
+      <Thickness x:Key="PagePadding">20,18,20,24</Thickness>
+      <Thickness x:Key="ChromePadding">20,12</Thickness>
+
+      <FontFamily x:Key="MonoFont">Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,monospace</FontFamily>
+    </ResourceDictionary>
+  </Application.Resources>
+
   <Application.Styles>
     <FluentTheme />
     <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
+
+    <!-- ====================================================== typography -->
+
     <Style Selector="TextBlock.h1">
-      <Setter Property="FontSize" Value="19" />
+      <Setter Property="FontSize" Value="20" />
       <Setter Property="FontWeight" Value="SemiBold" />
-      <Setter Property="Margin" Value="0,0,0,2" />
+      <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+      <Setter Property="Margin" Value="0,0,0,4" />
     </Style>
-    <Style Selector="TextBlock.sub">
-      <Setter Property="Opacity" Value="0.7" />
-      <Setter Property="TextWrapping" Value="Wrap" />
-      <Setter Property="Margin" Value="0,0,0,14" />
-    </Style>
-    <Style Selector="TextBlock.label">
-      <Setter Property="Margin" Value="0,0,0,3" />
+
+    <Style Selector="TextBlock.h2">
+      <Setter Property="FontSize" Value="13" />
       <Setter Property="FontWeight" Value="SemiBold" />
-      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+      <Setter Property="Margin" Value="0,0,0,8" />
     </Style>
-    <Style Selector="TextBlock.hint">
-      <Setter Property="Opacity" Value="0.65" />
+
+    <!-- Small caps-ish section marker for card headers. -->
+    <Style Selector="TextBlock.eyebrow">
       <Setter Property="FontSize" Value="11" />
-      <Setter Property="TextWrapping" Value="Wrap" />
-      <Setter Property="Margin" Value="0,3,0,0" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+      <Setter Property="Margin" Value="0,0,0,10" />
     </Style>
+
+    <Style Selector="TextBlock.sub">
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="MaxWidth" Value="760" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="Margin" Value="0,0,0,18" />
+    </Style>
+
+    <Style Selector="TextBlock.label">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+      <Setter Property="Margin" Value="0,0,0,3" />
+    </Style>
+
+    <!--
+      The hints carry the MSI and Intune rules that are expensive to learn the
+      hard way, so they are quiet but never faint enough to skip.
+    -->
+    <Style Selector="TextBlock.hint">
+      <Setter Property="FontSize" Value="11.5" />
+      <Setter Property="LineHeight" Value="16" />
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="Margin" Value="0,4,0,0" />
+    </Style>
+
+    <Style Selector="TextBlock.mono">
+      <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+      <Setter Property="FontSize" Value="11.5" />
+      <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <Style Selector="TextBlock.empty">
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="TextAlignment" Value="Center" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="MaxWidth" Value="420" />
+    </Style>
+
+    <!-- ========================================================== surfaces -->
+
     <Style Selector="Border.card">
-      <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundAltHighBrush}" />
-      <Setter Property="BorderBrush" Value="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+      <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="{DynamicResource CardPadding}" />
+      <Setter Property="Margin" Value="0,0,0,16" />
+    </Style>
+
+    <!-- A card nested inside a card, so it must read as recessed, not raised. -->
+    <Style Selector="Border.inner">
+      <Setter Property="Background" Value="{DynamicResource SunkenBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="6" />
-      <Setter Property="Padding" Value="14" />
-      <Setter Property="Margin" Value="0,0,0,12" />
+      <Setter Property="Padding" Value="12" />
+      <Setter Property="Margin" Value="0" />
     </Style>
+
+    <Style Selector="Border.empty">
+      <Setter Property="Background" Value="{DynamicResource SunkenBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="24" />
+    </Style>
+
+    <Style Selector="Separator">
+      <Setter Property="Background" Value="{DynamicResource BorderSubtleBrush}" />
+      <Setter Property="Height" Value="1" />
+      <Setter Property="Margin" Value="0,12" />
+    </Style>
+
+    <!-- ============================================================ status -->
+
+    <Style Selector="Border.pill">
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="8,2" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Background" Value="{DynamicResource SunkenBrush}" />
+    </Style>
+    <Style Selector="Border.pill.pass">
+      <Setter Property="Background" Value="{DynamicResource PassBackBrush}" />
+    </Style>
+    <Style Selector="Border.pill.warn">
+      <Setter Property="Background" Value="{DynamicResource WarnBackBrush}" />
+    </Style>
+    <Style Selector="Border.pill.fail">
+      <Setter Property="Background" Value="{DynamicResource FailBackBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.pilltext">
+      <Setter Property="FontSize" Value="10.5" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.pilltext.pass">
+      <Setter Property="Foreground" Value="{DynamicResource PassTextBrush}" />
+    </Style>
+    <Style Selector="TextBlock.pilltext.warn">
+      <Setter Property="Foreground" Value="{DynamicResource WarnTextBrush}" />
+    </Style>
+    <Style Selector="TextBlock.pilltext.fail">
+      <Setter Property="Foreground" Value="{DynamicResource FailTextBrush}" />
+    </Style>
+
+    <!-- Verdict banner: same semantics, more weight, full width. -->
+    <Style Selector="Border.verdict">
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="14,12" />
+      <Setter Property="BorderThickness" Value="1,1,1,1" />
+      <Setter Property="Background" Value="{DynamicResource FailBackBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+    </Style>
+    <Style Selector="Border.verdict.pass">
+      <Setter Property="Background" Value="{DynamicResource PassBackBrush}" />
+    </Style>
+    <Style Selector="TextBlock.verdicttext">
+      <Setter Property="FontSize" Value="13.5" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="Foreground" Value="{DynamicResource FailTextBrush}" />
+    </Style>
+    <Style Selector="TextBlock.verdicttext.pass">
+      <Setter Property="Foreground" Value="{DynamicResource PassTextBrush}" />
+    </Style>
+
+    <!-- =========================================================== buttons -->
+
+    <Style Selector="Button">
+      <Setter Property="CornerRadius" Value="5" />
+      <Setter Property="Padding" Value="13,6" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    </Style>
+    <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource SunkenBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    </Style>
+    <Style Selector="Button:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource BorderSubtleBrush}" />
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    </Style>
+
+    <!-- The one action the whole window exists for. -->
+    <Style Selector="Button.primary">
+      <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Padding" Value="26,8" />
+    </Style>
+    <Style Selector="Button.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource AccentHoverBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentHoverBrush}" />
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource AccentTextBrush}" />
+    </Style>
+    <Style Selector="Button.primary:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource AccentPressBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentPressBrush}" />
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource AccentTextBrush}" />
+    </Style>
+    <Style Selector="Button.primary:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource BorderSubtleBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource TextMutedBrush}" />
+    </Style>
+
+    <!-- Secondary affordances that should not compete with the row's default. -->
+    <Style Selector="Button.quiet">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+    </Style>
+    <Style Selector="Button.quiet:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource SunkenBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    </Style>
+
+    <!-- ============================================================ inputs -->
+
+    <Style Selector="TextBox">
+      <Setter Property="CornerRadius" Value="5" />
+      <Setter Property="Padding" Value="9,6" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="MinHeight" Value="32" />
+    </Style>
+    <Style Selector="TextBox.mono">
+      <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="ComboBox">
+      <Setter Property="CornerRadius" Value="5" />
+      <Setter Property="MinHeight" Value="32" />
+      <Setter Property="FontSize" Value="13" />
+    </Style>
+    <Style Selector="CheckBox">
+      <Setter Property="FontSize" Value="13" />
+    </Style>
+
+    <!-- ============================================================== tabs -->
+    <!--
+      A custom template rather than restyled Fluent chrome: the pill-shaped
+      default reads as a toy, and an underline indicator survives both themes
+      without fighting the Fluent brushes. Selection is still driven entirely
+      by TabControl, so switching behaviour is untouched.
+    -->
+    <Style Selector="TabControl">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Template">
+        <ControlTemplate TargetType="TabControl">
+          <DockPanel>
+            <Border DockPanel.Dock="Top"
+                    Background="{DynamicResource ChromeBrush}"
+                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                    BorderThickness="0,0,0,1"
+                    Padding="14,0,14,0">
+              <ItemsPresenter Name="PART_ItemsPresenter"
+                              ItemsPanel="{TemplateBinding ItemsPanel}" />
+            </Border>
+            <ContentPresenter Name="PART_SelectedContentHost"
+                              Content="{TemplateBinding SelectedContent}"
+                              ContentTemplate="{TemplateBinding SelectedContentTemplate}"
+                              Margin="{TemplateBinding Padding}" />
+          </DockPanel>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+
+    <Style Selector="TabItem">
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="FontWeight" Value="Normal" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Margin" Value="0" />
+      <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+      <Setter Property="Template">
+        <ControlTemplate TargetType="TabItem">
+          <Border Name="TabRoot" Background="Transparent" Padding="14,10,14,0">
+            <StackPanel>
+              <ContentPresenter Name="PART_ContentPresenter"
+                                Content="{TemplateBinding Header}"
+                                ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center" />
+              <Border Name="TabIndicator" Height="2" CornerRadius="1"
+                      Margin="0,8,0,0" Background="Transparent" />
+            </StackPanel>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="TabItem:pointerover">
+      <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    </Style>
+    <Style Selector="TabItem:pointerover /template/ Border#TabIndicator">
+      <Setter Property="Background" Value="{DynamicResource BorderStrongBrush}" />
+    </Style>
+    <Style Selector="TabItem:selected">
+      <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TabItem:selected /template/ Border#TabIndicator">
+      <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+    </Style>
+
+    <!-- ========================================================== datagrid -->
+
+    <Style Selector="DataGrid">
+      <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="GridLinesVisibility" Value="Horizontal" />
+      <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource BorderSubtleBrush}" />
+      <Setter Property="RowBackground" Value="Transparent" />
+      <Setter Property="FontSize" Value="12.5" />
+      <Setter Property="RowHeight" Value="30" />
+    </Style>
+    <Style Selector="DataGridColumnHeader">
+      <Setter Property="Background" Value="{DynamicResource SunkenBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="MinHeight" Value="30" />
+      <Setter Property="SeparatorBrush" Value="{DynamicResource BorderSubtleBrush}" />
+    </Style>
+
   </Application.Styles>
 </Application>

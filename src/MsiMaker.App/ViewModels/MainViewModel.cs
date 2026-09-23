@@ -37,10 +37,21 @@ public sealed class RunRow(RunAction action) : ObservableObject
 {
     public RunAction Model { get; } = action;
 
+    /// <summary>
+    /// Empty rather than null when the action runs a shell command instead of a
+    /// payload executable, so the grid has something to show either way.
+    /// </summary>
     public string ExePath
     {
-        get => Model.ExePath;
-        set { Model.ExePath = value; Raise(); }
+        get => Model.ExePath ?? "";
+        set { Model.ExePath = string.IsNullOrWhiteSpace(value) ? null : value; Raise(); }
+    }
+
+    /// <summary>A shell command, for actions not backed by a payload file.</summary>
+    public string Command
+    {
+        get => Model.Command ?? "";
+        set { Model.Command = string.IsNullOrWhiteSpace(value) ? null : value; Raise(); }
     }
 
     public string Arguments
@@ -72,12 +83,13 @@ public sealed class CheckRow(UpgradeCheck check)
         CheckStatus.Warn => "WARN",
         _ => "FAIL",
     };
-    public string Colour { get; } = check.Status switch
-    {
-        CheckStatus.Pass => "#2E7D32",
-        CheckStatus.Warn => "#B26A00",
-        _ => "#C62828",
-    };
+
+    // Exposed as three booleans rather than a colour string because the grid
+    // cell picks its palette through style classes, which honour the theme
+    // variant; a hard-coded hex would not.
+    public bool IsPass { get; } = check.Status == CheckStatus.Pass;
+    public bool IsWarn { get; } = check.Status == CheckStatus.Warn;
+    public bool IsFail { get; } = check.Status is not (CheckStatus.Pass or CheckStatus.Warn);
 }
 
 public sealed class MainViewModel : ObservableObject
@@ -166,12 +178,6 @@ public sealed class MainViewModel : ObservableObject
         set { _project.Output.IntuneWin = value; Raise(); }
     }
 
-    public bool UploadToIntune
-    {
-        get => _project.Output.UploadToIntune;
-        set { _project.Output.UploadToIntune = value; Raise(); }
-    }
-
     private string _outputPath = "";
     public string OutputPath { get => _outputPath; set => Set(ref _outputPath, value); }
 
@@ -196,12 +202,27 @@ public sealed class MainViewModel : ObservableObject
     private bool _hasAnalysis;
     public bool HasAnalysis { get => _hasAnalysis; set => Set(ref _hasAnalysis, value); }
 
+    /// <summary>Drives the payload tab's empty state.</summary>
+    public bool HasFiles => Files.Count > 0;
+
+    /// <summary>
+    /// A .exe or .msi is worth handing to the detective; anything else is just
+    /// payload sitting beside it.
+    /// </summary>
+    public static bool LooksLikeInstaller(string path)
+    {
+        string ext = Path.GetExtension(path);
+        return ext.Equals(".exe", StringComparison.OrdinalIgnoreCase)
+               || ext.Equals(".msi", StringComparison.OrdinalIgnoreCase);
+    }
+
     public void AddFile(string path)
     {
         var file = new PayloadFile { SourcePath = path };
         _project.Files.Add(file);
         Files.Add(new FileRow(file));
         Raise(nameof(CanBuild));
+        Raise(nameof(HasFiles));
     }
 
     public void RemoveFile(FileRow row)
@@ -209,6 +230,7 @@ public sealed class MainViewModel : ObservableObject
         _project.Files.Remove(row.Model);
         Files.Remove(row);
         Raise(nameof(CanBuild));
+        Raise(nameof(HasFiles));
     }
 
     /// <summary>
@@ -286,8 +308,11 @@ public sealed class MainViewModel : ObservableObject
     private string _verdict = "";
     public string Verdict { get => _verdict; set => Set(ref _verdict, value); }
 
-    private string _verdictColour = "#666666";
-    public string VerdictColour { get => _verdictColour; set => Set(ref _verdictColour, value); }
+    private bool _verdictIsGood;
+    public bool VerdictIsGood { get => _verdictIsGood; set => Set(ref _verdictIsGood, value); }
+
+    /// <summary>True once a comparison has run, so the tab can show a result instead of an empty grid.</summary>
+    public bool HasChecks => Checks.Count > 0;
 
     public void RunUpgradeCheck(string previous, string candidate)
     {
@@ -295,7 +320,8 @@ public sealed class MainViewModel : ObservableObject
         var report = UpgradeDoctor.Compare(previous, candidate);
         foreach (var c in report.Checks) Checks.Add(new CheckRow(c));
         Verdict = report.Summary;
-        VerdictColour = report.Verdict == UpgradeVerdict.UpgradesInPlace ? "#2E7D32" : "#C62828";
+        VerdictIsGood = report.Verdict == UpgradeVerdict.UpgradesInPlace;
+        Raise(nameof(HasChecks));
     }
 
     // --------------------------------------------------------------- build
@@ -318,7 +344,7 @@ public sealed class MainViewModel : ObservableObject
         {
             nameof(ProductName), nameof(Manufacturer), nameof(Version), nameof(UpgradeCode),
             nameof(ProductCodePreview), nameof(InstallFolder), nameof(Platform),
-            nameof(EmitIntuneWin), nameof(UploadToIntune), nameof(VersionNote), nameof(CanBuild),
+            nameof(EmitIntuneWin), nameof(VersionNote), nameof(CanBuild), nameof(HasFiles),
         }) Raise(name);
     }
 }

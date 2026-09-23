@@ -26,7 +26,7 @@ Msi/      string pool, table streams, summary information, schema
 Cab/      MSZIP cabinet writer
 Payload/  PE parsing, installer fingerprinting
 Build/    project model -> MSI
-Intune/   upgrade analysis, .intunewin, Graph upload
+Intune/   upgrade analysis, .intunewin packaging
 ```
 
 WiX 5 stays installed **as a development-time oracle only**. It builds reference
@@ -122,8 +122,6 @@ Building the `.msi` is the only mandatory stage. Everything else is opt-in:
 
 - `.intunewin` packaging — written in-process (encrypted payload + `Detection.xml`),
   so it works on macOS with no `IntuneWinAppUtil.exe`. **Off by default.**
-- Graph API upload to the tenant, including wiring supersedence to the previous
-  version. **Off by default.**
 - Remediation script pair, for "run this thing periodically" packages like HPIA
   where what matters is configuration drift, not app presence. **Off by default.**
 
@@ -147,6 +145,94 @@ argument for testing against msiexec with a real payload.
 | Scheduled task never registers | Task XML shipped BOM-less UTF-16 (`Encoding.GetBytes` emits no preamble), so it decoded as UTF-8: "task XML is malformed ... one root element". |
 | Custom action fails with error 1 | `[INSTALLFOLDER]` ends in a backslash, so `"...\"` escaped the closing quote. A trailing `.` keeps the argument well formed. |
 | Task XML contains `[#fileId]` verbatim | MSI formats its own table fields but never the contents of a file it installs. |
+
+## Failure and cleanup
+
+Three things Windows Installer will not do on its own, which a package has to
+arrange explicitly.
+
+**Rollback.** A deferred custom action is not undone when a later step fails.
+Without a paired rollback action, an install that dies after registering a
+scheduled task or running a wrapped installer leaves both behind. Every deferred
+action MsiMaker emits gets a rollback scheduled immediately ahead of it, since
+rollback actions replay in reverse order. A run action's undo may be a different
+program from the action itself - a wrapped installer is undone by the vendor's
+uninstaller, not by running the installer again - so `RollbackCommand` is
+separate from `RollbackArguments`. An action with no rollback at all produces a
+build warning rather than silent risk.
+
+Verified by forcing a failure: a package whose second task was deliberately
+malformed failed at 1603, and the first task, which had already been registered,
+was gone afterwards.
+
+**Removing what a wrapped installer installed.** Uninstalling the MSI removes
+the payload it laid down, not whatever an embedded installer wrote elsewhere. A
+run action can therefore invoke an arbitrary shell command rather than only an
+executable from the payload, which is how the vendor's own uninstaller gets
+called. Verified end to end with 7-Zip: install lands 107 files in a directory
+the MSI never created, and uninstall removes them.
+
+**Files held open.** A running process blocks file replacement and deletion, and
+Windows Installer answers that by failing or by quietly scheduling a reboot -
+neither of which anyone sees on a silent Intune deployment. `CloseProcesses`
+names the executables to close first.
+
+The sequencing here is not free. RemoveExistingProducts must be the first thing
+in the execution script, so nothing deferred may precede it: Windows Installer
+rejects that outright with error 2613, "RemoveExistingProducts action sequenced
+incorrectly". Closing therefore happens twice, and both passes are cheap - an
+immediate action before InstallInitialize, which frees files before an upgrade
+removes the old build, and a deferred one after RemoveExistingProducts, which
+runs elevated and so still works when the immediate pass could not.
+
+Verified with HP Image Assistant running and holding its own files open:
+uninstall returned 0, the process was closed, and the folder, registry entries
+and scheduled task were all removed with no reboot.
+
+## Code signing
+
+Authenticode over a compound file is deliberately not reimplemented. The
+signature covers a Windows-defined digest of the container inside a PKCS#7 blob,
+and getting that subtly wrong yields a package that looks signed and is rejected
+on the device. MsiMaker drives signtool or osslsigncode instead, so the file
+Windows validates is one Windows' own tooling produced.
+
+A password is never a field in the project file, only the *name* of an
+environment variable holding it - a project belongs in source control and a
+secret in it would go too.
+
+Three modes, inferred from whichever fields are filled in so older projects keep
+building unchanged:
+
+| Mode | Key material | Verified here |
+|---|---|---|
+| `Pfx` | A PFX on disk, unlocked from an environment variable | Yes, end to end |
+| `CertificateStore` | A certificate already in the Windows store, by thumbprint | Argument shape only |
+| `AzureTrustedSigning` | The key never leaves the service; signtool calls it through a dlib | **No - see below** |
+
+Verified for the PFX path with a throwaway self-signed certificate: the
+signature embeds, carries an RFC 3161 timestamp, and the signed package still
+loads every table and still installs and uninstalls - which also shows that
+signtool's in-place edit is compatible with the compound file this tool writes.
+
+Azure Trusted Signing is driven through signtool's dlib hook:
+
+```
+signtool sign /v /fd SHA256 /tr <timestamp> /td SHA256
+              /dlib <Azure.CodeSigning.Dlib.dll> /dmdf <metadata.json> <file.msi>
+```
+
+The dlib ships only inside the `Microsoft.Trusted.Signing.Client` NuGet package,
+so it is located in the restored package cache, newest version first. Credentials
+come from the ambient Azure credential chain - `AZURE_TENANT_ID`,
+`AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, or an interactive `az login` - and
+never from the project file, for the same reason the PFX password is not a field.
+
+**Not verified.** There is no Trusted Signing account reachable from here, so
+nothing has been signed against the service. What is tested is the argument
+construction, the metadata document, dlib discovery and every validation error.
+The dlib's acceptance of that metadata and the credential chain itself both need
+a first run against a real account.
 
 ## Scheduled tasks
 
@@ -176,6 +262,28 @@ detects on ProductCode and version, so upgrades work, and uninstall is a real
 uninstall. `samples/hpia-with-scheduled-task.json` also registers the weekly
 analyse-and-install task using HP's documented command line.
 
+## Recipe library
+
+A built-in set of package definitions for applications that are awkward to
+package, so the knowledge lives in the tool rather than in whoever last
+researched the switches. `msimaker recipes` lists them; `msimaker recipe <id>
+<out.json> <payload>` writes a starting project.
+
+Each recipe carries an **Awkwardness** note explaining *why* the application is
+hard, which is the part worth keeping: HPIA's file-exists detection that can
+never go true to false, 7-Zip's NSIS `/D=` switch that must be last and
+unquoted, Reader being a bootstrapper around an MSI that cannot be nested.
+
+Only `hp-image-assistant` and `7zip` are marked **Verified**, because only those
+two were actually built, installed, upgraded and uninstalled here. The other
+seven carry the switches from vendor documentation and say so in their notes. A
+confidently wrong silent switch breaks a fleet quietly, which is worse than a
+note telling the admin to check.
+
+Users extend the library by dropping JSON into `%APPDATA%\msimakerecipes`, or
+by pointing `MSIMAKER_RECIPES` at a shared team folder. A user file reusing a
+built-in id replaces it, so a wrong switch can be corrected the same day.
+
 ## Status
 
 | Component | State |
@@ -185,11 +293,16 @@ analyse-and-install task using HP's documented command line.
 | MSZIP cabinet writer | 27 MB payload to 10.9 MB, byte-exact on extraction |
 | Harvested schema, sequences, `_Validation` | Generated from a real MSI by `tools/genschema.py` |
 | Project model, folder payloads, builder | Working |
-| Installer detective (PE fingerprints) | Working; identifies HP SoftPaq, Inno, NSIS, Burn, NSIS, 7-Zip SFX and others |
+| Installer detective (PE fingerprints) | Working |
 | Upgrade doctor | Working; verified against deliberately broken packages |
-| Scheduled tasks | Working; registered on install, removed on uninstall |
+| Scheduled tasks | Registered on install, removed on uninstall |
+| Rollback actions | Verified by forcing a failed install |
+| Closing running processes | Verified with HPIA holding its own files open |
+| Wrapped-EXE uninstall | Verified with 7-Zip's own uninstaller |
+| Code signing (PFX) | Verified end to end, timestamped |
+| Code signing (Azure Trusted Signing) | Implemented; **not** verified against a real account |
 | `.intunewin` packaging | Working; HMAC verified |
+| Recipe library | 9 recipes, 2 verified |
 | Avalonia GUI | Builds and runs on Windows; cross-compiles for macOS |
-| Regression tests | 19 passing |
-| Graph upload to Intune | Not implemented - needs a tenant to test against |
+| Regression tests | 93 passing |
 | macOS verification | Cross-compiles; not yet run on a Mac |

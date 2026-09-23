@@ -1,0 +1,42 @@
+{
+  "Id": "dell-command-update",
+  "Name": "Dell Command | Update",
+  "Vendor": "Dell Technologies",
+  "Description": "Dell's driver, firmware and BIOS update client, wrapped so the deployment itself has a version Intune can compare.",
+  "Awkwardness": "Installing Dell Command | Update is not the same as updating anything. The work is done afterwards by dcu-cli.exe on a schedule, so a fleet can be one hundred per cent compliant on this application and still be a year behind on firmware. The installer also has a habit of removing what it considers conflicting Dell software (Dell Update, Dell SupportAssist for PCs are the usual casualties), which is the correct behaviour and still a surprise if nobody was told. Dell ships the application in two flavours - the classic Win32 build and the Universal Windows Platform build - which land in different folders and carry different uninstall strings, so a detection or uninstall rule written against one silently does nothing on the other.",
+  "DownloadUrl": "https://www.dell.com/support/kbdoc/en-uk/000177325/dell-command-update",
+  "DownloadNotes": "Dell's download page requires you to pick a flavour. Note which one you took - Universal Windows Platform or classic - because the install path and uninstall string differ.",
+  "SetupFileHint": "Dell-Command-Update-Application_XXXXX.EXE",
+  "Verified": false,
+  "Notes": [
+    "NOT tested in this repository. The switches below are transcribed from Dell's documentation, which is usually right and occasionally a release out of date.",
+    "Run 'msimaker analyze <installer>' against your actual download first: the fingerprint confirms the installer family, and so the switches.",
+    "Dell documents /s for a silent install and a /l=<file> logging switch. Neither has been run here. Try them by hand on one device before deploying.",
+    "No uninstall action is wired up, deliberately. Dell Command | Update registers its own entry in Programs and Features and this package cannot guess the uninstall string; read it out of the registry on a test device, then add a Run action with Command and When: Uninstall.",
+    "What you probably want next is a scheduled task running dcu-cli.exe, which lives under Program Files\\Dell\\CommandUpdate. Its switches changed between DCU 4 and DCU 5, so check the Dell Command | Update reference guide for the version you deployed rather than copying a command from a blog. A scheduled task in this project cannot reference dcu-cli.exe anyway: a task's executable must be part of the payload."
+  ],
+  "Project": {
+    "ProductName": "Dell Command Update",
+    "Manufacturer": "Dell Technologies",
+    "Version": "5.4.0",
+    "UpgradeCode": "edb5901b-b960-422b-9dff-b8b4b363d5ae",
+    "Platform": "X64",
+    "ManufacturerFolder": "Dell",
+    "InstallFolder": "Command Update Wrapper",
+    "Files": [
+      { "SourcePath": "{payload}", "TargetPath": "setup.exe" }
+    ],
+    "Run": [
+      {
+        "Id": "install",
+        "ExePath": "setup.exe",
+        "Arguments": "/s",
+        "When": "Install"
+      }
+    ],
+    "Arp": {
+      "AboutUrl": "https://www.dell.com/support/kbdoc/en-uk/000177325/dell-command-update",
+      "Comments": "Dell Command | Update wrapped as an MSI. Silent switches from vendor documentation, untested."
+    }
+  }
+}

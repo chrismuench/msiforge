@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using MsiMaker.Core.Signing;
 
 namespace MsiMaker.Core.Model;
 
@@ -49,14 +50,47 @@ public sealed class RunAction
 {
     public required string Id { get; set; }
 
-    /// <summary>Path of the executable relative to the install folder.</summary>
-    public required string ExePath { get; set; }
+    /// <summary>
+    /// Path of the executable relative to the install folder. Leave this null and
+    /// set <see cref="Command"/> instead to run something the package did not
+    /// install.
+    /// </summary>
+    public string? ExePath { get; set; }
+
+    /// <summary>
+    /// A shell command, run through cmd.exe, for something that is not in the
+    /// payload - most often a vendor uninstaller that a wrapped installer put
+    /// somewhere of its own choosing, which the MSI could otherwise never
+    /// remove. Quote inner paths yourself.
+    /// </summary>
+    public string? Command { get; set; }
 
     public string Arguments { get; set; } = "";
     public RunWhen When { get; set; } = RunWhen.Install;
 
     /// <summary>Let the install continue even if the process returns non-zero.</summary>
     public bool IgnoreExitCode { get; set; }
+
+    /// <summary>
+    /// Arguments that undo this action if the install fails later on, run against
+    /// the same executable. Windows Installer cannot roll back an arbitrary
+    /// executable by itself, so without a rollback a failed install leaves
+    /// whatever the executable did in place.
+    /// </summary>
+    public string? RollbackArguments { get; set; }
+
+    /// <summary>
+    /// A shell command that undoes this action, for when the undo is a different
+    /// program from the one that did it - a wrapped installer is undone by the
+    /// vendor's uninstaller, not by running the installer again. Takes precedence
+    /// over <see cref="RollbackArguments"/>.
+    /// </summary>
+    public string? RollbackCommand { get; set; }
+
+    /// <summary>True when this action registers a rollback of either kind.</summary>
+    [JsonIgnore]
+    public bool HasRollback =>
+        !string.IsNullOrWhiteSpace(RollbackArguments) || !string.IsNullOrWhiteSpace(RollbackCommand);
 
     public string? Condition { get; set; }
 }
@@ -105,14 +139,8 @@ public sealed class OutputOptions
     /// <summary>Also emit a Win32 .intunewin package.</summary>
     public bool IntuneWin { get; set; }
 
-    /// <summary>Upload to Intune via Graph after building.</summary>
-    public bool UploadToIntune { get; set; }
-
     /// <summary>Emit a Proactive Remediation detect/remediate pair.</summary>
     public bool RemediationScripts { get; set; }
-
-    public string? TenantId { get; set; }
-    public string? ClientId { get; set; }
 }
 
 public sealed class MsiProject
@@ -149,7 +177,17 @@ public sealed class MsiProject
     public List<RegistryValue> Registry { get; set; } = [];
     public List<ShortcutSpec> Shortcuts { get; set; } = [];
     public List<ScheduledTaskSpec> Tasks { get; set; } = [];
+
+    /// <summary>
+    /// Executable names to close before the package touches any file, e.g.
+    /// "HPImageAssistant.exe". A running process holds its files open, so an
+    /// upgrade cannot replace them and an uninstall cannot delete them - Windows
+    /// Installer then either fails or quietly schedules a reboot, which on a
+    /// silent Intune deployment nobody sees.
+    /// </summary>
+    public List<string> CloseProcesses { get; set; } = [];
     public ArpInfo Arp { get; set; } = new();
+    public SigningOptions Signing { get; set; } = new();
     public OutputOptions Output { get; set; } = new();
 
     [JsonIgnore]
@@ -262,9 +300,20 @@ public sealed class MsiProject
         }
 
         foreach (var r in Run)
-            if (!Files.Any(f => string.Equals(f.EffectiveTarget, r.ExePath.Replace('\\', '/').TrimStart('/'),
-                                              StringComparison.OrdinalIgnoreCase)))
+        {
+            bool hasExe = !string.IsNullOrWhiteSpace(r.ExePath);
+            bool hasCommand = !string.IsNullOrWhiteSpace(r.Command);
+
+            if (hasExe == hasCommand)
+            {
+                errors.Add($"Run action '{r.Id}' needs exactly one of ExePath or Command.");
+                continue;
+            }
+            if (hasExe && !Files.Any(f => string.Equals(
+                    f.EffectiveTarget, r.ExePath!.Replace('\\', '/').TrimStart('/'),
+                    StringComparison.OrdinalIgnoreCase)))
                 errors.Add($"Run action '{r.Id}' points at '{r.ExePath}', which is not in the payload.");
+        }
 
         return errors;
     }

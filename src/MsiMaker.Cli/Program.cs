@@ -3,6 +3,8 @@ using MsiMaker.Core.Intune;
 using MsiMaker.Core.Model;
 using MsiMaker.Core.Msi;
 using MsiMaker.Core.Payload;
+using MsiMaker.Core.Recipes;
+using MsiMaker.Core.Signing;
 
 if (args.Length == 0)
 {
@@ -11,8 +13,12 @@ if (args.Length == 0)
 
           build     <project.json> [out.msi]   Build an MSI from a project
           analyze   <installer.exe> [proj.json] Identify the installer and its silent switches
+          recipes                              List the built-in recipes for awkward applications
+          recipe    <id> <out.json> [payload]  Write a starting project from a recipe
           upgrade   <old.msi> <new.msi>        Will Intune actually upgrade? Check before shipping
           intunewin <file.msi> [out]           Wrap an MSI as a Win32 .intunewin package
+          sign      <file.msi> [project.json]  Authenticode-sign a package
+          verify-signature <file.msi>          Check an existing signature
           inspect   <file.msi>                 Show identity, upgrade and table summary
           roundtrip <file.msi> <out.msi>       Read, rewrite and verify table fidelity
         """);
@@ -28,8 +34,12 @@ try
         case "subset": return Subset(args[1], args[2], args[3..]);
         case "build": return BuildProject(args[1], args.Length > 2 ? args[2] : null);
         case "analyze": return Analyze(args[1], args.Length > 2 ? args[2] : null);
+        case "recipes": return ListRecipes();
+        case "recipe": return WriteRecipe(args[1], args[2], args.Length > 3 ? args[3] : null);
         case "upgrade": return UpgradeCheck(args[1], args[2]);
         case "intunewin": return MakeIntuneWin(args[1], args.Length > 2 ? args[2] : null);
+        case "sign": return SignMsi(args[1], args.Length > 2 ? args[2] : null);
+        case "verify-signature": return VerifySignature(args[1]);
         case "inspect": return Inspect(args[1]);
         case "roundtrip": return RoundTrip(args[1], args[2]);
         default:
@@ -75,6 +85,138 @@ static int Analyze(string path, string? projectOut)
         Console.WriteLine($"wrote starter project {projectOut} (UpgradeCode {DeterministicGuid.Format(project.UpgradeCode)} - keep it stable forever)");
     }
     return 0;
+}
+
+/// <summary>
+/// Lists the library. The awkwardness note is printed in full rather than
+/// truncated: it is the reason the recipe exists, and an admin scanning the
+/// list is choosing on it.
+/// </summary>
+static int ListRecipes()
+{
+    var library = RecipeLibrary.Load();
+    var recipes = library.List();
+
+    foreach (var r in recipes)
+    {
+        string source = r.FromUserFolder ? " (yours)" : "";
+        Console.WriteLine($"{r.Id,-22} {(r.Verified ? "verified" : "untested")}{source}  {r.Name} - {r.Vendor}");
+        WriteWrapped(r.Awkwardness, "    ");
+        Console.WriteLine();
+    }
+
+    Console.WriteLine($"{recipes.Count} recipes  "
+                      + $"({recipes.Count(r => r.Verified)} verified, {recipes.Count(r => !r.Verified)} untested)");
+    Console.WriteLine("  verified  built, installed, upgraded and uninstalled from this repository");
+    Console.WriteLine("  untested  switches transcribed from vendor documentation; try one device first");
+    Console.WriteLine($"  yours     .json files in {library.UserDirectory}");
+    Console.WriteLine("            (override that folder with MSIMAKER_RECIPES; a file reusing a");
+    Console.WriteLine("             built-in id replaces that built-in)");
+    foreach (var p in library.Problems) Console.WriteLine($"  warning: {p}");
+    return 0;
+}
+
+static int WriteRecipe(string id, string output, string? payload)
+{
+    var library = RecipeLibrary.Load();
+    var recipe = library.Find(id);
+    if (recipe is null)
+    {
+        Console.Error.WriteLine($"No recipe '{id}'. Run 'msimaker recipes' for the library.");
+        return 2;
+    }
+
+    var project = RecipeLibrary.Instantiate(recipe, payload);
+    project.Save(output);
+
+    Console.WriteLine($"wrote {output} from recipe '{recipe.Id}'");
+    Console.WriteLine(recipe.Verified
+        ? "  Status         VERIFIED - this package was built, installed, upgraded and uninstalled here"
+        : "  Status         UNTESTED - switches are vendor documentation, not something proven here");
+    Console.WriteLine($"  ProductName    {project.ProductName}");
+    Console.WriteLine($"  ProductVersion {project.Version}  (set this to the version you downloaded)");
+    Console.WriteLine($"  UpgradeCode    {DeterministicGuid.Format(project.UpgradeCode)}  (stable - never change it)");
+    Console.WriteLine($"  Payload        {(payload is null ? Recipe.PayloadToken + "  (fill this in before building)" : Path.GetFullPath(payload))}");
+    if (recipe.SetupFileHint is not null) Console.WriteLine($"  Expecting      {recipe.SetupFileHint}");
+    if (recipe.DownloadUrl is not null) Console.WriteLine($"  Download       {recipe.DownloadUrl}");
+
+    Console.WriteLine();
+    Console.WriteLine("why this one is awkward:");
+    WriteWrapped(recipe.Awkwardness, "  ");
+
+    if (recipe.DownloadNotes is not null)
+    {
+        Console.WriteLine();
+        Console.WriteLine("getting the payload:");
+        WriteWrapped(recipe.DownloadNotes, "  ");
+    }
+
+    if (recipe.Notes.Count > 0)
+    {
+        Console.WriteLine();
+        Console.WriteLine("notes:");
+        foreach (var note in recipe.Notes) WriteWrapped(note, "    ", "  - ");
+    }
+
+    // Report now rather than at build time: a project that cannot build is
+    // cheaper to find out about while the admin is still looking at the recipe.
+    project.ExpandFolders();
+    var errors = project.Validate();
+    if (errors.Count > 0)
+    {
+        Console.WriteLine();
+        Console.WriteLine("not buildable yet:");
+        foreach (var e in errors) Console.WriteLine($"  {e}");
+    }
+    return 0;
+}
+
+/// <summary>
+/// Wraps prose to a readable width; recipe notes are paragraphs, not labels.
+/// <paramref name="firstIndent"/> gives a bullet its hanging indent.
+/// </summary>
+static void WriteWrapped(string text, string indent, string? firstIndent = null)
+{
+    const int width = 76;
+    string prefix = firstIndent ?? indent;
+    var line = new System.Text.StringBuilder();
+    foreach (string word in text.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+    {
+        if (line.Length > 0 && line.Length + 1 + word.Length > width)
+        {
+            Console.WriteLine(prefix + line);
+            prefix = indent;
+            line.Clear();
+        }
+        if (line.Length > 0) line.Append(' ');
+        line.Append(word);
+    }
+    if (line.Length > 0) Console.WriteLine(prefix + line);
+}
+
+static int SignMsi(string msiPath, string? projectPath)
+{
+    var options = projectPath is null ? new SigningOptions { Enabled = true }
+                                      : MsiProject.Load(projectPath).Signing;
+    options.Enabled = true;
+
+    string? signer = CodeSigner.FindSigner(options.SignerPath);
+    Console.WriteLine($"signer: {signer ?? "(none found)"}");
+
+    var result = CodeSigner.Sign(msiPath, options);
+    Console.WriteLine(result.Signed
+        ? $"signed {Path.GetFileName(msiPath)} with {result.Tool}"
+        : $"NOT signed: {result.Detail}");
+    return result.Signed ? 0 : 1;
+}
+
+static int VerifySignature(string msiPath)
+{
+    var result = CodeSigner.Verify(msiPath);
+    Console.WriteLine(result.Signed
+        ? $"signature valid ({result.Tool})"
+        : $"signature NOT valid: {result.Detail}");
+    return result.Signed ? 0 : 1;
 }
 
 static int MakeIntuneWin(string msiPath, string? output)
@@ -184,6 +326,16 @@ static int BuildProject(string projectPath, string? outputPath)
     Console.WriteLine($"  PackageCode    {result.PackageCode}");
     Console.WriteLine($"  Size           {result.SizeBytes:N0} bytes");
     foreach (var w in result.Warnings) Console.WriteLine($"  warning: {w}");
+
+    // Signing is last: any edit to the database would invalidate the signature.
+    if (project.Signing.Enabled)
+    {
+        var signed = CodeSigner.Sign(result.MsiPath, project.Signing);
+        Console.WriteLine(signed.Signed
+            ? $"  Signed         {signed.Tool}"
+            : $"  SIGNING FAILED {signed.Detail}");
+        if (!signed.Signed) return 1;
+    }
     return 0;
 }
 

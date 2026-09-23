@@ -4,6 +4,7 @@ using MsiMaker.Core.Cfbf;
 using MsiMaker.Core.Intune;
 using MsiMaker.Core.Model;
 using MsiMaker.Core.Msi;
+using MsiMaker.Core.Signing;
 using Xunit;
 
 namespace MsiMaker.Tests;
@@ -244,6 +245,128 @@ public class EngineTests
         var report = UpgradeDoctor.Compare(a, b);
         Assert.Equal(UpgradeVerdict.UpgradesInPlace, report.Verdict);
         Assert.DoesNotContain(report.Checks, c => c.Status == CheckStatus.Fail);
+    }
+
+    [Fact]
+    public void DeferredTaskActionsHaveAPairedRollback()
+    {
+        // Without a rollback action, an install that fails after the task is
+        // registered leaves the task behind.
+        string dir = TempDir();
+        string exe = Path.Combine(dir, "tool.exe");
+        File.WriteAllBytes(exe, [0x4D, 0x5A]);   // enough to be a payload file
+
+        var project = new MsiProject
+        {
+            ProductName = "Rollback",
+            Manufacturer = "Test Co",
+            Version = "1.0.0",
+            UpgradeCode = Guid.NewGuid(),
+            Files = { new PayloadFile { SourcePath = exe } },
+            Tasks = { new ScheduledTaskSpec { Name = "T", ExePath = "tool.exe" } },
+        };
+
+        string output = Path.Combine(dir, "rollback.msi");
+        MsiBuilder.Build(project, output);
+        var db = MsiDatabase.Load(output);
+
+        var actions = db.Tables["CustomAction"];
+        var rollback = actions.Rows.Single(r => ((string)r[0]!).Contains("rollback"));
+        var create = actions.Rows.Single(r => ((string)r[0]!).Contains("create"));
+
+        const int rollbackFlag = 256;
+        Assert.True(((int)rollback[1]! & rollbackFlag) != 0, "rollback action must set msidbCustomActionTypeRollback");
+        Assert.True(((int)create[1]! & rollbackFlag) == 0, "the create action must not");
+
+        // Rollback actions replay in reverse, so it has to be scheduled first.
+        var sequence = db.Tables["InstallExecuteSequence"];
+        int rollbackSeq = (int)sequence.Rows.Single(r => (string?)r[0] == (string?)rollback[0])[2]!;
+        int createSeq = (int)sequence.Rows.Single(r => (string?)r[0] == (string?)create[0])[2]!;
+        Assert.True(rollbackSeq < createSeq, $"rollback at {rollbackSeq} must precede create at {createSeq}");
+    }
+
+    [Fact]
+    public void RunActionWithoutRollbackIsFlagged()
+    {
+        string dir = TempDir();
+        var project = SampleProject(dir);
+        project.Run.Add(new RunAction { Id = "setup", ExePath = "readme.txt", Arguments = "/S" });
+
+        var result = MsiBuilder.Build(project, Path.Combine(dir, "run.msi"));
+        Assert.Contains(result.Warnings, w => w.Contains("RollbackArguments"));
+    }
+
+    [Fact]
+    public void ClosingProcessesNeverPrecedesRemoveExistingProducts()
+    {
+        // A deferred action between InstallInitialize and RemoveExistingProducts
+        // is rejected outright: error 2613, "RemoveExistingProducts action
+        // sequenced incorrectly".
+        string dir = TempDir();
+        var project = SampleProject(dir);
+        project.CloseProcesses.Add("HPImageAssistant.exe");
+        project.CloseProcesses.Add("notepad");        // extension supplied for us
+
+        string output = Path.Combine(dir, "close.msi");
+        MsiBuilder.Build(project, output);
+        var db = MsiDatabase.Load(output);
+
+        var sequence = db.Tables["InstallExecuteSequence"];
+        int Seq(string action) => (int)sequence.Rows.Single(r => (string?)r[0] == action)[2]!;
+
+        int init = Seq("InstallInitialize");
+        int rep = Seq("RemoveExistingProducts");
+        Assert.Equal(1501, rep);
+        Assert.True(rep > init);
+
+        var actions = db.Tables["CustomAction"];
+        var closeActions = actions.Rows.Where(r => ((string)r[0]!).StartsWith("ca_close")).ToList();
+        Assert.Equal(4, closeActions.Count);   // immediate and deferred, per process
+
+        const int deferredFlag = 1024;
+        foreach (var action in closeActions)
+        {
+            string id = (string)action[0]!;
+            int seq = Seq(id);
+            bool isDeferred = ((int)action[1]! & deferredFlag) != 0;
+
+            if (isDeferred)
+                Assert.True(seq > rep, $"deferred {id} at {seq} must follow RemoveExistingProducts at {rep}");
+            else
+                Assert.True(seq < init, $"immediate {id} at {seq} must precede InstallInitialize at {init}");
+        }
+
+        // Missing extensions are filled in, so "notepad" becomes "notepad.exe".
+        Assert.Contains(actions.Rows, r => ((string?)r[3] ?? "").Contains("notepad.exe"));
+    }
+
+    [Fact]
+    public void SigningIsOffUnlessAsked()
+    {
+        var result = CodeSigner.Sign("nonexistent.msi", new SigningOptions());
+        Assert.False(result.Signed);
+        Assert.Contains("not enabled", result.Detail);
+    }
+
+    [Fact]
+    public void SigningRefusesWhenTheCertificateIsNotIdentified()
+    {
+        string? signer = CodeSigner.FindSigner();
+        if (signer is null) return; // nothing installed to sign with here
+
+        var result = CodeSigner.Sign("nonexistent.msi", new SigningOptions { Enabled = true });
+        Assert.False(result.Signed);
+        Assert.Contains("CertificatePath", result.Detail);
+    }
+
+    [Fact]
+    public void SigningPasswordIsNeverStoredInTheProject()
+    {
+        // A project file belongs in source control; a password in it would go too.
+        var options = new SigningOptions();
+        var properties = options.GetType().GetProperties().Select(p => p.Name).ToList();
+        Assert.Contains("PasswordEnvironmentVariable", properties);
+        Assert.DoesNotContain(properties, n => n.Equals("Password", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

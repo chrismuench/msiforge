@@ -60,19 +60,16 @@ public partial class MainWindow : Window
 
     // ------------------------------------------------------------- payload
 
+    /// <summary>
+    /// The manual escape hatch. Adding files analyses on its own, so this only
+    /// earns its place when the automatic choice picked the wrong installer out
+    /// of several, or when an installer was renamed to an extension we ignore.
+    /// </summary>
     private async void OnAnalyse(object? sender, RoutedEventArgs e)
     {
         var file = await PickOpen("Choose an installer to analyse", ExeType, AnyType);
         if (file is null) return;
-        try
-        {
-            _model.Analyse(file.Path.LocalPath);
-            Status($"Analysed {file.Name}: {_model.AnalysisSummary}");
-        }
-        catch (Exception ex)
-        {
-            Status($"Could not analyse {file.Name}: {ex.Message}");
-        }
+        Analyse(file.Path.LocalPath, "");
     }
 
     private async void OnAddFiles(object? sender, RoutedEventArgs e)
@@ -82,8 +79,45 @@ public partial class MainWindow : Window
             Title = "Add payload files",
             AllowMultiple = true,
         });
-        foreach (var f in files) _model.AddFile(f.Path.LocalPath);
-        if (files.Count > 0) Status($"Added {files.Count} file(s).");
+        if (files.Count == 0) return;
+
+        var paths = files.Select(f => f.Path.LocalPath).ToList();
+
+        // Add everything first so the payload keeps the order it was picked in.
+        // Analyse() adds its own file too, but guards against a duplicate, so by
+        // the time it runs the file is already present and it will not add it twice.
+        foreach (string path in paths) _model.AddFile(path);
+
+        string added = $"Added {paths.Count} file(s).";
+        var installers = paths.Where(MainViewModel.LooksLikeInstaller).ToList();
+
+        if (installers.Count == 0)
+        {
+            Status($"{added} Nothing that looks like an installer, so no analysis was run.");
+            return;
+        }
+
+        // With more than one candidate there is no way to know which is the real
+        // installer, so take the first and say so rather than guessing silently.
+        string target = installers[0];
+        string note = installers.Count > 1
+            ? $" {installers.Count} installers added - analysed the first. Use Re-analyse to choose another."
+            : "";
+        Analyse(target, added, note);
+    }
+
+    private void Analyse(string path, string prefix, string note = "")
+    {
+        string name = Path.GetFileName(path);
+        try
+        {
+            _model.Analyse(path);
+            Status($"{prefix} Analysed {name}: {_model.AnalysisSummary}.{note}".TrimStart());
+        }
+        catch (Exception ex)
+        {
+            Status($"{prefix} Could not analyse {name}: {ex.Message}".TrimStart());
+        }
     }
 
     private void OnRemoveFile(object? sender, RoutedEventArgs e)
@@ -216,9 +250,6 @@ public partial class MainWindow : Window
                 var packaged = IntuneWinPackager.PackageMsi(result.MsiPath, intunewin);
                 _model.Append($"built {packaged.Path} ({packaged.EncryptedSize:N0} bytes)");
             }
-
-            if (_model.UploadToIntune)
-                _model.Append("upload to Intune: not configured in this build - sign-in is not wired up yet.");
 
             // Comparing against the deployed version is the whole point, so offer
             // it as soon as there is something to compare.

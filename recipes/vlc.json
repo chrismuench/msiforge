@@ -1,0 +1,50 @@
+{
+  "Id": "vlc",
+  "Name": "VLC media player",
+  "Vendor": "VideoLAN",
+  "Description": "The vendor's NSIS installer, wrapped with the vendor uninstaller wired to uninstall and to rollback.",
+  "Awkwardness": "The same NSIS /D= trap as every Nullsoft installer - last switch, never quoted - with an extra sting of its own: a silent VLC install takes every file association it knows about, so a fleet silently acquires VLC as the default handler for several dozen media types that another application may already own. VideoLAN also ships win32 and win64 builds from the same page with near-identical names, and the 32-bit build installs into Program Files (x86), which quietly invalidates any path-based detection or uninstall rule written for the 64-bit one.",
+  "DownloadUrl": "https://www.videolan.org/vlc/download-windows.html",
+  "SetupFileHint": "vlc-X.Y.Z-win64.exe - check the architecture in the file name.",
+  "Verified": false,
+  "Notes": [
+    "NOT tested in this repository. /S for NSIS is well established, but nothing here has been run against a real device.",
+    "Run 'msimaker analyze <installer>' against your download to confirm the NSIS fingerprint.",
+    "/D= is deliberately unquoted; quoting it silently breaks the switch and VLC installs to the default path.",
+    "File associations are taken by default on a silent install. VLC's installer exposes component selection in its UI but this has not been tested from the command line here - if associations matter to you, test on one device before deploying to a fleet.",
+    "The uninstall command assumes the vendor uninstaller is uninstall.exe in the install folder. Confirm the file name on a test device.",
+    "Set Version to the VLC version you downloaded."
+  ],
+  "Project": {
+    "ProductName": "VLC media player",
+    "Manufacturer": "VideoLAN",
+    "Version": "3.0.21",
+    "UpgradeCode": "58d11fe4-648f-431c-be2d-39988a39699d",
+    "Platform": "X64",
+    "ManufacturerFolder": "VideoLAN",
+    "InstallFolder": "VLC Wrapper",
+    "Files": [
+      { "SourcePath": "{payload}", "TargetPath": "setup.exe" }
+    ],
+    "Run": [
+      {
+        "Id": "install",
+        "ExePath": "setup.exe",
+        "Arguments": "/S /D=C:\\Program Files\\VideoLAN\\VLC",
+        "When": "Install",
+        "RollbackCommand": "\"C:\\Program Files\\VideoLAN\\VLC\\uninstall.exe\" /S"
+      },
+      {
+        "Id": "uninstall",
+        "Command": "\"C:\\Program Files\\VideoLAN\\VLC\\uninstall.exe\" /S",
+        "When": "Uninstall",
+        "IgnoreExitCode": true
+      }
+    ],
+    "CloseProcesses": ["vlc.exe"],
+    "Arp": {
+      "AboutUrl": "https://www.videolan.org/vlc/",
+      "Comments": "VLC wrapped as an MSI. Silent switches from vendor documentation, untested."
+    }
+  }
+}

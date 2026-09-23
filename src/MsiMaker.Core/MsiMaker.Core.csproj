@@ -2,4 +2,14 @@
   <PropertyGroup>
     <RootNamespace>MsiMaker.Core</RootNamespace>
   </PropertyGroup>
+
+  <!--
+    The recipe library ships inside the assembly so the CLI stays a single file
+    that works on a machine with no network and no install step. LogicalName is
+    pinned so the resource names do not depend on where the files sit on disk.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)../../recipes/*.json"
+                      LogicalName="MsiMaker.Core.Recipes.%(Filename).json" />
+  </ItemGroup>
 </Project>

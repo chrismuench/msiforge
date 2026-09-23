@@ -1,0 +1,42 @@
+{
+  "Id": "lenovo-system-update",
+  "Name": "Lenovo System Update",
+  "Vendor": "Lenovo",
+  "Description": "Lenovo's driver and firmware update client, wrapped so the client itself has a version Intune can compare.",
+  "Awkwardness": "As with the Dell equivalent, installing the client updates nothing: System Update installs a Windows service and its own scheduled task, and those are what actually fetch packages, so the application can be perfectly deployed while the estate quietly stops updating. The installer's file name carries the version and changes with every release, which breaks any Intune command line that names the EXE - hence the payload here is copied in under a fixed name. Lenovo also has no stable download URL: you fetch the current build from the support site, so nothing about this package can be automated end to end without a mirror of your own.",
+  "DownloadUrl": "https://support.lenovo.com/solutions/ht003029",
+  "DownloadNotes": "Fetch the current System Update build from Lenovo's support site. The file name changes every release (system_update_X.YY.ZZ.NN.exe), so record which build you packaged.",
+  "SetupFileHint": "system_update_X.YY.ZZ.NN.exe",
+  "Verified": false,
+  "Notes": [
+    "NOT tested in this repository. The switches below are transcribed from Lenovo's deployment documentation and have not been run here.",
+    "/VERYSILENT /NORESTART is Inno Setup syntax. Run 'msimaker analyze <installer>' against your download to confirm the installer really is Inno Setup before trusting it - if the fingerprint says something else, the switches are wrong.",
+    "No uninstall action is wired up. An Inno Setup install leaves unins000.exe in its own install folder; find that path on a test device, then add a Run action with Command and When: Uninstall, something of the form \"<path>\\unins000.exe\" /VERYSILENT /NORESTART.",
+    "System Update installs a service (SUService) and its own scheduled task. Removing the application without removing those leaves both behind, which is another reason to get the uninstall right rather than leaving it to the MSI.",
+    "Set Version to the build you actually packaged."
+  ],
+  "Project": {
+    "ProductName": "Lenovo System Update",
+    "Manufacturer": "Lenovo",
+    "Version": "5.8.3",
+    "UpgradeCode": "e1d1d842-f37f-4a0d-8ece-62eb832d2cfc",
+    "Platform": "X64",
+    "ManufacturerFolder": "Lenovo",
+    "InstallFolder": "System Update Wrapper",
+    "Files": [
+      { "SourcePath": "{payload}", "TargetPath": "setup.exe" }
+    ],
+    "Run": [
+      {
+        "Id": "install",
+        "ExePath": "setup.exe",
+        "Arguments": "/VERYSILENT /NORESTART",
+        "When": "Install"
+      }
+    ],
+    "Arp": {
+      "AboutUrl": "https://support.lenovo.com/solutions/ht003029",
+      "Comments": "Lenovo System Update wrapped as an MSI. Silent switches from vendor documentation, untested."
+    }
+  }
+}
