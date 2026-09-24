@@ -99,19 +99,22 @@ package.
 | Build an MSI | yes | yes |
 | Inspect, round-trip, upgrade check | yes | yes |
 | `.intunewin` packaging | yes | yes |
-| Sign with a PFX | signtool or osslsigncode | osslsigncode |
+| **Sign with a PFX** | **yes, nothing to install** | **yes, nothing to install** |
 | Sign from the certificate store | yes | no — needs signtool |
 | Azure Trusted Signing | yes (unverified) | no — needs signtool |
 | Install and test what you built | yes | no — msiexec is Windows-only |
 
 `doctor` reports all of this for the machine it runs on.
 
-For signing off Windows, install the signer first:
+PFX signing is done in process, in managed code, so macOS needs no signer
+installed. signtool and osslsigncode are still used where only they can help:
+the Windows certificate store, and Azure Trusted Signing. If either is on the
+machine it can be preferred explicitly.
 
-```bash
-brew install osslsigncode          # macOS
-sudo apt install osslsigncode      # Debian/Ubuntu
-```
+The digest was written against an oracle — digests produced by signtool and
+osslsigncode were pulled out of already-signed packages and required to match
+byte for byte before a single signature was produced — because a subtly wrong
+digest yields a package that looks signed and is rejected on the device.
 
 ## Projects and bundles
 
