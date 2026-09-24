@@ -55,14 +55,42 @@ build      <project|bundle> [out.msi]   Build an MSI
 pack       <project.json> [out]         Bundle a project and its payload into one file
 analyze    <installer.exe> [proj.json]  Identify the installer and its silent switches
 upgrade    <old.msi> <new.msi>          Will Intune actually upgrade? Check before shipping
+intune     <file.msi>                   Exactly what to enter in the Intune portal
 intunewin  <file.msi> [out]             Wrap an MSI as a Win32 .intunewin package
 sign       <file.msi> [project.json]    Authenticode-sign a package
 recipes                                 List the built-in package recipes
 recipe     <id> <out.json> [payload]    Start a project from a recipe
+explain    <msiexec.log>                Say what actually went wrong in an install log
 inspect    <file.msi>                   Show identity, upgrade and table summary
 doctor                                  What this machine can and cannot do
 selftest                                Build and verify a package end to end
 ```
+
+## When a deployment fails
+
+A failed install gives an administrator a 1603 and half a megabyte of log. The
+cause is in there, but it is one line among thousands, phrased for whoever wrote
+the installer engine.
+
+```
+msimaker explain install.log
+```
+
+Every explanation it gives is a failure that was hit, diagnosed and fixed while
+building this tool, so it says what the message actually turned out to mean:
+
+```
+failing action: RemoveExistingProducts
+
+[2613] RemoveExistingProducts is in the wrong place in the sequence.
+
+    Nothing deferred may run between InstallInitialize and
+    RemoveExistingProducts; it has to be the first thing in the execution script.
+```
+
+It recognises the quiet ones too - the missing `File.Version` that makes an
+upgrade delete most of the application while every reader still accepts the
+package.
 
 ## What works where
 

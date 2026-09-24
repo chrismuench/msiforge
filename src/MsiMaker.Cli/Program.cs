@@ -1,4 +1,5 @@
 using MsiMaker.Core.Build;
+using MsiMaker.Core.Diagnostics;
 using MsiMaker.Core.Intune;
 using MsiMaker.Core.Model;
 using MsiMaker.Core.Msi;
@@ -23,6 +24,7 @@ if (args.Length == 0)
           verify-signature <file.msi>          Check an existing signature
           doctor                               What this machine can and cannot do
           selftest                             Build and verify a package end to end
+          explain   <msiexec.log>              Say what actually went wrong in an install log
           inspect   <file.msi>                 Show identity, upgrade and table summary
           roundtrip <file.msi> <out.msi>       Read, rewrite and verify table fidelity
         """);
@@ -48,6 +50,7 @@ try
         case "doctor": return MsiMaker.Cli.SelfTest.Doctor();
         case "sign": return SignMsi(args[1], args.Length > 2 ? args[2] : null);
         case "verify-signature": return VerifySignature(args[1]);
+        case "explain": return ExplainLog(args[1]);
         case "inspect": return Inspect(args[1]);
         case "roundtrip": return RoundTrip(args[1], args[2]);
         default:
@@ -370,6 +373,36 @@ static int BuildProject(string projectPath, string? outputPath)
             ? $"  Signed         {signed.Tool}"
             : $"  SIGNING FAILED {signed.Detail}");
         if (!signed.Signed) return 1;
+    }
+    return 0;
+}
+
+static int ExplainLog(string logPath)
+{
+    var findings = InstallLogReader.Read(logPath);
+    string? action = InstallLogReader.FailingAction(logPath);
+
+    Console.WriteLine($"{Path.GetFileName(logPath)}  ({new FileInfo(logPath).Length:N0} bytes)");
+    if (action is not null) Console.WriteLine($"failing action: {action}");
+
+    if (findings.Count == 0)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Nothing recognised. Search the log for 'Return value 3' and read the lines above it.");
+        return 0;
+    }
+
+    foreach (var f in findings)
+    {
+        Console.WriteLine();
+        Console.WriteLine($"[{f.Code}] {f.Summary}   (line {f.LineNumber})");
+        Console.WriteLine();
+        WriteWrapped(f.Meaning, "    ");
+        Console.WriteLine();
+        Console.WriteLine("  fix");
+        WriteWrapped(f.Fix, "    ");
+        Console.WriteLine();
+        Console.WriteLine($"  log: {f.Evidence}");
     }
     return 0;
 }
