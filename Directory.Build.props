@@ -9,7 +9,7 @@
 
     <!-- The release version, stamped into every binary and used to name the
          release assets. The first cut. -->
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
 
     <!-- Security rules are held at maximum and treated as errors; the rest of the
          analyzer set stays at its default. Turning everything to All produced 246

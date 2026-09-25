@@ -39,11 +39,8 @@ cat > "$work/project.json" <<JSON
 }
 JSON
 
-$cli build "$work/project.json" "$work/out.msi"
-unsigned=$(wc -c < "$work/out.msi")
-echo "unsigned: $unsigned bytes"
-echo
-
+# The certificate has to exist before the build: the project turns signing on, so
+# the build signs as its last step and needs the .pfx already in place.
 echo "=== a throwaway signing certificate ==="
 openssl req -x509 -newkey rsa:2048 -sha256 -days 2 -nodes \
     -keyout "$work/key.pem" -out "$work/cert.pem" \
@@ -56,16 +53,9 @@ openssl pkcs12 -export -out "$work/ci.pfx" \
 echo "pfx: $(wc -c < "$work/ci.pfx") bytes"
 echo
 
-echo "=== sign it ==="
-$cli sign "$work/out.msi" "$work/project.json"
-
-signed=$(wc -c < "$work/out.msi")
-echo "signed: $signed bytes"
-if [ "$signed" -le "$unsigned" ]; then
-    echo "FAIL: the file did not grow, so no signature was embedded"
-    exit 1
-fi
-
+echo "=== build a signed package here ==="
+$cli build "$work/project.json" "$work/out.msi"
+echo "signed: $(wc -c < "$work/out.msi") bytes"
 echo
 echo "=== is the signature really there? ==="
 # osslsigncode verify fails on chain trust for a self-signed certificate, which

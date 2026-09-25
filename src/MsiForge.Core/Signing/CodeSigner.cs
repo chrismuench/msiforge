@@ -484,7 +484,9 @@ public static class CodeSigner
         {
             File.WriteAllText(metadata, BuildAzureMetadataJson(options));
             var (code, output) = Run(signer, BuildSigntoolArguments(msiPath, options, dlibPath: dlib, metadataPath: metadata));
-            return new SigningResult(code == 0, "signtool", Summarise(output));
+            return code == 0
+                ? new SigningResult(true, "signtool", Summarise(output))
+                : Failure("signtool", code, output, null);
         }
         finally
         {
@@ -500,7 +502,34 @@ public static class CodeSigner
         var (code, output) = Run(signer, BuildSigntoolArguments(msiPath, options, password));
         return code == 0
             ? new SigningResult(true, "signtool", Summarise(output))
-            : new SigningResult(false, "signtool", Redact(Summarise(output), password));
+            : Failure("signtool", code, output, password);
+    }
+
+    /// <summary>
+    /// A failed external signer, with the whole of its output kept for
+    /// troubleshooting - written to a log file (password redacted) and pointed at,
+    /// because the inline summary is only the last few lines and the real cause of a
+    /// bring-your-own-cert or Azure-connectivity failure is often earlier.
+    /// </summary>
+    private static SigningResult Failure(string tool, int code, string output, string? password)
+    {
+        string redacted = Redact(output, password);
+        string summary = Summarise(redacted);
+        if (string.IsNullOrWhiteSpace(summary))
+            summary = $"{tool} exited with code {code} and produced no output.";
+
+        try
+        {
+            string log = Path.Combine(Path.GetTempPath(),
+                $"msiforge-signing-{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.log");
+            File.WriteAllText(log,
+                $"{tool} exited with code {code}{Environment.NewLine}{Environment.NewLine}{redacted}{Environment.NewLine}");
+            summary += $" Full signer output written to {log}";
+        }
+        catch (IOException) { /* the inline summary still carries the gist */ }
+        catch (UnauthorizedAccessException) { }
+
+        return new SigningResult(false, tool, summary);
     }
 
     private static SigningResult SignWithOsslsigncode(string signer, string msiPath, SigningOptions options, string? password)
@@ -541,7 +570,7 @@ public static class CodeSigner
             if (code != 0)
             {
                 if (File.Exists(temp)) File.Delete(temp);
-                return new SigningResult(false, "osslsigncode", Redact(Summarise(output), password));
+                return Failure("osslsigncode", code, output, password);
             }
 
             File.Move(temp, msiPath, overwrite: true);
