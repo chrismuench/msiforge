@@ -234,6 +234,14 @@ public sealed class MainViewModel : ObservableObject
     public ObservableCollection<RunRow> Run { get; } = [];
     public ObservableCollection<TaskRow> Tasks { get; } = [];
 
+    /// <summary>
+    /// Whether the package runs anything at install time. Drives the grid: with
+    /// commands it is shown at a real height so the rows (and the arguments a
+    /// detected installer brought in) are visible; empty, it collapses to a hint
+    /// so it does not bury the rest of the step.
+    /// </summary>
+    public bool HasRunActions => Run.Count > 0;
+
     /// <summary>Drives the visibility of the scheduled-task panel on the Arguments step.</summary>
     public bool HasTasks => Tasks.Count > 0;
     public ObservableCollection<CheckRow> Checks { get; } = [];
@@ -756,6 +764,7 @@ public sealed class MainViewModel : ObservableObject
     {
         _project.Run.Add(action);
         Run.Add(new RunRow(action));
+        Raise(nameof(HasRunActions));
         RefreshWizard();
     }
 
@@ -763,6 +772,7 @@ public sealed class MainViewModel : ObservableObject
     {
         _project.Run.Remove(row.Model);
         Run.Remove(row);
+        Raise(nameof(HasRunActions));
         RefreshWizard();
     }
 
@@ -821,7 +831,7 @@ public sealed class MainViewModel : ObservableObject
         foreach (var t in project.Tasks) Tasks.Add(new TaskRow(t));
         foreach (var name in new[]
         {
-            nameof(HasTasks),
+            nameof(HasRunActions), nameof(HasTasks),
             nameof(ProductName), nameof(Manufacturer), nameof(Version), nameof(UpgradeCode),
             nameof(ProductCodePreview), nameof(InstallFolder), nameof(Platform),
             nameof(EmitIntuneWin), nameof(VersionNote), nameof(CanBuild), nameof(HasFiles),

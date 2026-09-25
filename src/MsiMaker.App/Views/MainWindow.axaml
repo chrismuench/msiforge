@@ -712,7 +712,16 @@
                   </Button>
                 </StackPanel>
 
-                <DataGrid Name="RunGrid" ItemsSource="{Binding Run}" MinHeight="150" MaxHeight="280"
+                <!--
+                  Shown at a real height when there are commands, so imported
+                  rows and their arguments are fully visible (a DataGrid in a
+                  StackPanel needs a definite height or it renders its rows too
+                  short). When empty it is replaced by a one-line hint, so a
+                  task-only blueprint like HPIA does not carry a tall blank box
+                  that buries the scheduled-task card below it.
+                -->
+                <DataGrid Name="RunGrid" ItemsSource="{Binding Run}"
+                          IsVisible="{Binding HasRunActions}" MinHeight="120" MaxHeight="280"
                           AutoGenerateColumns="False">
                   <DataGrid.Columns>
                     <DataGridTextColumn Header="Executable" Binding="{Binding ExePath}" Width="240" />
@@ -720,15 +729,17 @@
                     <DataGridCheckBoxColumn Header="Ignore exit code" Binding="{Binding IgnoreExitCode}" Width="140" />
                   </DataGrid.Columns>
                 </DataGrid>
+
+                <TextBlock Classes="hint" Margin="0" IsVisible="{Binding !HasRunActions}"
+                           Text="No install-time commands. Most packages need none - add one only if this package must run something during install or uninstall." />
               </StackPanel>
             </Border>
 
             <!--
-              Some tools do their real work on a schedule rather than at install -
-              HP Image Assistant, Dell Command Update and Lenovo System Update all
-              register a task that runs later as SYSTEM - so the command that
-              matters lives here, not in the grid above. Shown only when the
-              blueprint defines a task, with its arguments editable.
+              A scheduled task is uncommon - only the device/driver tools use one -
+              so this card keeps the same position below the commands for every
+              blueprint rather than jumping to the top when it happens to exist.
+              It is shown only when the blueprint defines a task.
             -->
             <Border Classes="card" IsVisible="{Binding HasTasks}">
               <StackPanel Spacing="16">
