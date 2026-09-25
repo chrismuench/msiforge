@@ -722,6 +722,64 @@
                 </DataGrid>
               </StackPanel>
             </Border>
+
+            <!--
+              Some tools do their real work on a schedule rather than at install -
+              HP Image Assistant, Dell Command Update and Lenovo System Update all
+              register a task that runs later as SYSTEM - so the command that
+              matters lives here, not in the grid above. Shown only when the
+              blueprint defines a task, with its arguments editable.
+            -->
+            <Border Classes="card" IsVisible="{Binding HasTasks}">
+              <StackPanel Spacing="16">
+
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <TextBlock Classes="eyebrow" Text="SCHEDULED TASK" Margin="0" VerticalAlignment="Center" />
+                  <Button Classes="info">
+                    <Button.Flyout>
+                      <Flyout>
+                        <TextBlock Classes="disclosure"
+                                   Text="This task is registered at install and runs later on its own schedule, as SYSTEM. For tools like HP Image Assistant it is where the real work happens - the analyse-and-update run - so this command, not an install-time one, is what does the job. Editing the arguments changes what gets scheduled." />
+                      </Flyout>
+                    </Button.Flyout>
+                  </Button>
+                </StackPanel>
+
+                <ItemsControl ItemsSource="{Binding Tasks}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:TaskRow">
+                      <Border Classes="inner" Margin="0,0,0,10">
+                        <StackPanel Spacing="10">
+                          <StackPanel Spacing="2">
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextPrimaryBrush}" />
+                            <TextBlock Classes="hint" Margin="0" Text="{Binding ScheduleSummary}" />
+                            <TextBlock Classes="hint" Margin="0" IsVisible="{Binding HasDescription}"
+                                       Text="{Binding Description}" TextWrapping="Wrap" />
+                          </StackPanel>
+
+                          <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Runs"
+                                       Margin="0,4,14,0" />
+                            <SelectableTextBlock Grid.Row="0" Grid.Column="1" Text="{Binding ExePath}"
+                                                 FontFamily="{DynamicResource MonoFont}" FontSize="12"
+                                                 Margin="0,0,0,10" VerticalAlignment="Center"
+                                                 Foreground="{DynamicResource TextSecondaryBrush}" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="Arguments"
+                                       Margin="0,6,14,0" />
+                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Arguments}"
+                                     AcceptsReturn="False" TextWrapping="Wrap"
+                                     FontFamily="{DynamicResource MonoFont}" FontSize="12"
+                                     Watermark="switches this task runs with" />
+                          </Grid>
+                        </StackPanel>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
           </StackPanel>
         </ScrollViewer>
       </TabItem>

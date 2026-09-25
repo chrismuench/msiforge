@@ -544,12 +544,34 @@ public partial class MainWindow : Window
             return;
         }
 
+        // No output chosen yet: ask where to save rather than dropping the MSI
+        // silently next to the payload. The payload's own folder is offered as the
+        // starting location, and the name is pre-filled; cancelling cancels the
+        // build, so nothing is written to a place the user did not pick.
         string output = _model.OutputPath;
         if (string.IsNullOrWhiteSpace(output))
         {
-            output = Path.Combine(
-                Path.GetDirectoryName(_model.Files[0].Source) ?? Directory.GetCurrentDirectory(),
-                $"{MsiProject.Sanitize(_model.ProductName)}-{_model.Project.ComparableVersion}.msi");
+            string? payloadDir = _model.Files.Count > 0
+                ? Path.GetDirectoryName(_model.Files[0].Source)
+                : null;
+            var start = string.IsNullOrWhiteSpace(payloadDir)
+                ? null
+                : await StorageProvider.TryGetFolderFromPathAsync(payloadDir);
+
+            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Where should the MSI be written?",
+                SuggestedFileName = $"{MsiProject.Sanitize(_model.ProductName)}-{_model.Project.ComparableVersion}.msi",
+                DefaultExtension = "msi",
+                FileTypeChoices = [MsiType],
+                SuggestedStartLocation = start,
+            });
+            if (file is null)
+            {
+                Status("Build cancelled - no output location chosen.");
+                return;
+            }
+            output = file.Path.LocalPath;
             _model.OutputPath = output;
         }
 

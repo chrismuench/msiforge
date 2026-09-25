@@ -75,6 +75,48 @@ public sealed class RunRow(RunAction action) : ObservableObject
     }
 }
 
+/// <summary>
+/// One scheduled task the package registers. The command it runs is the whole
+/// point of a task-based blueprint (HP Image Assistant, Dell Command Update,
+/// Lenovo System Update all do their real work here, not at install), so it is
+/// surfaced and its arguments made editable rather than hidden in the JSON.
+/// </summary>
+public sealed class TaskRow(ScheduledTaskSpec task) : ObservableObject
+{
+    public ScheduledTaskSpec Model { get; } = task;
+
+    public string Name => Model.Name;
+    public string ExePath => Model.ExePath;
+
+    public string Arguments
+    {
+        get => Model.Arguments;
+        set { Model.Arguments = value; Raise(); }
+    }
+
+    public string Description => Model.Description ?? "";
+    public bool HasDescription => !string.IsNullOrWhiteSpace(Model.Description);
+
+    /// <summary>A one-line, human reading of when and how the task runs.</summary>
+    public string ScheduleSummary
+    {
+        get
+        {
+            string when = Model.Trigger switch
+            {
+                TaskTrigger.Weekly =>
+                    $"Weekly on {string.Join(", ", Model.DaysOfWeek)} at {Model.StartTime}",
+                TaskTrigger.Daily => Model.IntervalDays > 1
+                    ? $"Every {Model.IntervalDays} days at {Model.StartTime}"
+                    : $"Daily at {Model.StartTime}",
+                _ => $"At {Model.StartTime}",
+            };
+            string who = Model.RunAsSystem ? "as SYSTEM" : "as the signed-in user";
+            return $"{when}, {who}";
+        }
+    }
+}
+
 public sealed class CheckRow(UpgradeCheck check)
 {
     public string Name { get; } = check.Name;
@@ -190,6 +232,10 @@ public sealed class MainViewModel : ObservableObject
 
     public ObservableCollection<FileRow> Files { get; } = [];
     public ObservableCollection<RunRow> Run { get; } = [];
+    public ObservableCollection<TaskRow> Tasks { get; } = [];
+
+    /// <summary>Drives the visibility of the scheduled-task panel on the Arguments step.</summary>
+    public bool HasTasks => Tasks.Count > 0;
     public ObservableCollection<CheckRow> Checks { get; } = [];
     public ObservableCollection<BlueprintRow> Blueprints { get; } = [];
 
@@ -771,8 +817,11 @@ public sealed class MainViewModel : ObservableObject
         foreach (var f in project.Files) Files.Add(new FileRow(f));
         Run.Clear();
         foreach (var r in project.Run) Run.Add(new RunRow(r));
+        Tasks.Clear();
+        foreach (var t in project.Tasks) Tasks.Add(new TaskRow(t));
         foreach (var name in new[]
         {
+            nameof(HasTasks),
             nameof(ProductName), nameof(Manufacturer), nameof(Version), nameof(UpgradeCode),
             nameof(ProductCodePreview), nameof(InstallFolder), nameof(Platform),
             nameof(EmitIntuneWin), nameof(VersionNote), nameof(CanBuild), nameof(HasFiles),
