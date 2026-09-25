@@ -8,6 +8,7 @@ using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
 using MsiMaker.App.ViewModels;
+using MsiMaker.Core.Build;
 using MsiMaker.Core.Intune;
 using MsiMaker.Core.Model;
 using MsiMaker.Core.Payload;
@@ -629,6 +630,8 @@ public partial class MainWindow : Window
                 _model.Append($"upgrade check: {_model.Verdict}");
             }
 
+            AppendDeploymentUsage(result);
+
             Status($"Built {Path.GetFileName(result.MsiPath)}.{signedNote}");
 
             // The unmistakable part: a green banner naming the file and its size,
@@ -638,6 +641,18 @@ public partial class MainWindow : Window
                             + intunewinNote;
             _model.ShowBuildResult(true, $"{Path.GetFileName(result.MsiPath)} is ready",
                                    result.MsiPath, detail);
+
+            // The easy-to-use part: rather than make the admin read the log, put the
+            // deployment commands in front of them, ready to copy, with a way to the
+            // folder the package (and any .intunewin) landed in.
+            string sub = _model.EmitIntuneWin
+                ? "Deploy the .intunewin through Intune, or run the MSI directly with these commands. Anyone can run it with HELP=1 to see the same options."
+                : "Deploy it with these commands. Anyone can run it with HELP=1 to see the same options.";
+            await new DeploymentDialog(
+                $"{Path.GetFileName(result.MsiPath)} is ready",
+                sub,
+                string.Join("\n", DeploymentCommandLines(result)),
+                result.MsiPath).ShowDialog(this);
         }
         catch (Exception ex)
         {
@@ -645,6 +660,57 @@ public partial class MainWindow : Window
             Status("Build failed - see the log.");
             _model.ShowBuildResult(false, "Build failed", "", ex.Message);
         }
+    }
+
+    /// <summary>
+    /// The command lines an administrator needs to deploy the built MSI - install,
+    /// silent install, the HELP switch, any declared parameters, and the exact
+    /// uninstall - so they never have to be reconstructed by hand. Shared by the
+    /// log and the "package ready" dialog, formatted for a monospace column.
+    /// </summary>
+    private List<string> DeploymentCommandLines(BuildResult result)
+    {
+        string name = Path.GetFileName(result.MsiPath);
+        string q = name.Contains(' ') ? "\"" : "";
+        string named = $"{q}{name}{q}";
+        string productCode = DeterministicGuid.Format(result.ProductCode);
+
+        const int pad = 24;
+        string Row(string label, string command) => $"{label.PadRight(pad)}{command}";
+
+        var lines = new List<string>
+        {
+            Row("Install (with a bar)", $"msiexec /i {named}"),
+            Row("Install silently", $"msiexec /i {named} /qn /norestart"),
+            Row("Show its options", $"msiexec /i {named} HELP=1"),
+            Row("Uninstall", $"msiexec /x {productCode} /qn"),
+            // A public property of the MSI's own payload; a wrapped vendor installer
+            // still lands where the build-time choice put it, not here.
+            Row("Set install folder", $"msiexec /i {named} INSTALLFOLDER=\"C:\\Program Files\\App\""),
+        };
+
+        var parameters = _model.Project.Parameters;
+        if (parameters.Count > 0)
+        {
+            lines.Add("");
+            lines.Add("Parameters (add NAME=value to any command above):");
+            foreach (var p in parameters)
+            {
+                string dft = string.IsNullOrWhiteSpace(p.Default) ? "" : $" [default: {p.Default}]";
+                string desc = string.IsNullOrWhiteSpace(p.Description) ? "" : $" - {p.Description}";
+                lines.Add($"  {p.Name}={dft}{desc}");
+            }
+        }
+
+        return lines;
+    }
+
+    /// <summary>Puts the deployment commands in the build log as a permanent record.</summary>
+    private void AppendDeploymentUsage(BuildResult result)
+    {
+        _model.Append("");
+        _model.Append("how to deploy this MSI:");
+        foreach (var line in DeploymentCommandLines(result)) _model.Append("  " + line);
     }
 
     /// <summary>

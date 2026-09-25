@@ -1,0 +1,35 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MsiMaker.App.Views.DeploymentDialog"
+        Title="Package ready"
+        Width="660" SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource WindowBrush}">
+
+  <StackPanel Margin="24" Spacing="16">
+
+    <StackPanel Spacing="6">
+      <TextBlock Name="Heading" Classes="h1" FontSize="18" Margin="0"
+                 Text="Your package is ready" />
+      <TextBlock Name="SubText" Classes="sub" Margin="0" TextWrapping="Wrap"
+                 Text="Deploy it with these commands. Anyone can run it with HELP=1 to see the same options." />
+    </StackPanel>
+
+    <!--
+      A read-only text box, not a label: it selects, scrolls and copies exactly,
+      so an admin can lift a command straight out even without the copy button.
+    -->
+    <TextBox Name="CommandsBox" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
+             FontFamily="{DynamicResource MonoFont}" FontSize="12" MaxHeight="280"
+             ScrollViewer.HorizontalScrollBarVisibility="Auto"
+             ScrollViewer.VerticalScrollBarVisibility="Auto" />
+
+    <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+      <Button Grid.Column="0" Name="ShowFolderButton" Classes="quiet" Content="Show in folder" />
+      <Button Grid.Column="2" Name="CopyButton" Classes="quiet" Content="Copy commands" />
+      <Button Grid.Column="3" Name="CloseButton" Classes="primary" Content="Close" Margin="10,0,0,0" />
+    </Grid>
+
+  </StackPanel>
+</Window>
