@@ -473,6 +473,12 @@ public sealed class MainViewModel : ObservableObject
         set { _project.Output.IntuneWin = value; Raise(); }
     }
 
+    public bool ShowInstallWizard
+    {
+        get => _project.ShowInstallWizard;
+        set { _project.ShowInstallWizard = value; Raise(); }
+    }
+
     private string _outputPath = "";
     public string OutputPath { get => _outputPath; set => Set(ref _outputPath, value); }
 
@@ -834,7 +840,7 @@ public sealed class MainViewModel : ObservableObject
             nameof(HasRunActions), nameof(HasTasks),
             nameof(ProductName), nameof(Manufacturer), nameof(Version), nameof(UpgradeCode),
             nameof(ProductCodePreview), nameof(InstallFolder), nameof(Platform),
-            nameof(EmitIntuneWin), nameof(VersionNote), nameof(CanBuild), nameof(HasFiles),
+            nameof(EmitIntuneWin), nameof(ShowInstallWizard), nameof(VersionNote), nameof(CanBuild), nameof(HasFiles),
 
             // Signing lives on the project too, so a loaded project - or a
             // blueprint template - has to repaint the whole signing section.

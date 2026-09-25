@@ -125,6 +125,16 @@ for itself — a package never sees them.
 `%ProgramFiles%` is the default, and it is the safe one: Windows grants ordinary
 users read and execute there and nothing else.
 
+By default the MSI carries a small **setup wizard** — Welcome, a destination-folder
+page with Browse, a ready-to-install page, progress, and a completion screen — so
+anyone running it by hand can choose where it goes and see it finish. It is
+authored in pure MSI tables (no native custom actions) and a silent install
+(`/qn`, as Intune uses) never shows it, so it costs nothing there. Turn it off
+(`ShowInstallWizard: false`, or the checkbox on the Build step) for a package
+meant only to be pushed silently. For a wrapped vendor installer, the folder
+chosen in the wizard places the wrapper's own payload; the vendor's files still
+land wherever its installer switch sends them.
+
 `C:\ProgramData` is not the same. Its default ACL gives `BUILTIN\Users`
 container-inherit **write and add-subdirectory**, and `CREATOR OWNER` full
 control over anything they create — and every folder made underneath it inherits

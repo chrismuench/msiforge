@@ -511,6 +511,13 @@ public static class MsiBuilder
         installSequence.Add(HelpActionId, HelpProperty, 1);
         db.Std("InstallUISequence").Add(HelpActionId, HelpProperty, 1);
 
+        // A setup wizard for anyone who runs the package by hand: Welcome, a
+        // destination-folder page, ready, progress and a completion screen. Silent
+        // installs (/qn) never see it. Off is honoured for a package meant only to
+        // be pushed silently.
+        if (project.ShowInstallWizard)
+            MsiInstallerUi.Emit(db, offerFolderChoice: true);
+
         if (processesToClose.Count > 0)
         {
             EnsureSystemDirectory();

@@ -183,6 +183,45 @@ public class EngineTests
     }
 
     [Fact]
+    public void SetupWizardIsAuthoredWhenEnabled()
+    {
+        string dir = TempDir();
+        string output = Path.Combine(dir, "wiz.msi");
+        MsiBuilder.Build(SampleProject(dir), output);   // ShowInstallWizard defaults true
+
+        var db = MsiDatabase.Load(output);
+        var dialogs = db.Tables["Dialog"].Rows.Select(r => (string)r[0]!).ToList();
+        Assert.Contains("WelcomeDlg", dialogs);
+        Assert.Contains("InstallDirDlg", dialogs);
+        Assert.Contains("BrowseDlg", dialogs);
+        Assert.Contains("ExitDialog", dialogs);
+
+        // The folder page is bound to the install directory, and the chosen path is
+        // applied by a built-in SetTargetPath event - no custom action.
+        Assert.Equal("INSTALLFOLDER", db.GetProperty("WIXUI_INSTALLDIR"));
+        Assert.Contains(db.Tables["ControlEvent"].Rows, r => (string?)r[2] == "SetTargetPath");
+
+        // The completion dialog uses the special -1 sequence the installer shows on
+        // success; without it there is no finish screen.
+        var ui = db.Tables["InstallUISequence"].Rows;
+        Assert.Equal(-1, (int)ui.Single(r => (string?)r[0] == "ExitDialog")[2]!);
+    }
+
+    [Fact]
+    public void SetupWizardIsOmittedWhenDisabled()
+    {
+        string dir = TempDir();
+        string output = Path.Combine(dir, "nowiz.msi");
+        var project = SampleProject(dir);
+        project.ShowInstallWizard = false;
+        MsiBuilder.Build(project, output);
+
+        var db = MsiDatabase.Load(output);
+        Assert.False(db.Tables.ContainsKey("Dialog"));
+        Assert.DoesNotContain(db.Tables["InstallUISequence"].Rows, r => (string?)r[0] == "WelcomeDlg");
+    }
+
+    [Fact]
     public void VersionedFilesDeclareTheirVersion()
     {
         // Left null, Windows Installer treats the file as unversioned, refuses to

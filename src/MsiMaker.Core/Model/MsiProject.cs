@@ -203,6 +203,15 @@ public sealed class MsiProject
     /// <summary>Optional manufacturer folder above the install folder.</summary>
     public string? ManufacturerFolder { get; set; }
 
+    /// <summary>
+    /// Author a setup wizard into the MSI - Welcome, a destination-folder page
+    /// with Browse, ready-to-install, progress and a completion screen - so a
+    /// person running it by hand can choose where it installs and sees it finish.
+    /// A silent deployment (/qn, as Intune uses) suppresses it regardless, so this
+    /// costs nothing there. On by default.
+    /// </summary>
+    public bool ShowInstallWizard { get; set; } = true;
+
     public List<PayloadFile> Files { get; set; } = [];
     public List<PayloadFolder> Folders { get; set; } = [];
     public List<RunAction> Run { get; set; } = [];
