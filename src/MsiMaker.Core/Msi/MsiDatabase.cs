@@ -173,7 +173,9 @@ public sealed class MsiDatabase
         {
             foreach (var row in ReadRows(colBytes, colsSchema, strings, stringRefSize))
             {
-                string table = (string)row[0]!;
+                // A string reference of 0, or one past the end of the pool, reads back as
+        // null - which as a dictionary key throws rather than being ignored.
+        if (row[0] is not string table) continue;
                 int type = row[3] is int t ? t & 0xFFFF : 0;
                 schema.TryAdd(table, []);
                 schema[table].Add((row[1] as int? ?? 0, (string)(row[2] ?? "")!, type));
@@ -212,19 +214,31 @@ public sealed class MsiDatabase
         var result = new string[Math.Max(n, 1)];
         result[0] = string.Empty;
 
+        // A string index is not a pool slot. A string longer than 65535 bytes is
+        // written as two consecutive 4-byte slots - (0, lengthHigh) then
+        // (lengthLow, refcount) - but it is still one string and takes one index,
+        // exactly as the writer above assigns them.
+        //
+        // Conflating the two shifts every string after the first long one by one
+        // position. Nothing throws: the tables still parse, every value is still a
+        // real string from the pool, just the wrong one. That reaches the upgrade
+        // check, which then answers "will this upgrade?" confidently and wrongly.
         int offset = 0;
-        for (int i = 1; i < n; i++)
+        int index = 1;
+        for (int slot = 1; slot < n && index < result.Length; slot++, index++)
         {
-            int len = Word(i * 2);
-            int refs = Word(i * 2 + 1);
-            if (len == 0 && refs != 0 && i + 1 < n)
+            int len = Word(slot * 2);
+            int refs = Word(slot * 2 + 1);
+            if (len == 0 && refs != 0 && slot + 1 < n)
             {
-                // Long string: the real length spills into the following pool slot.
-                len = (refs << 16) | Word(i * 2 + 2);
-                i++;
+                // Cast before shifting - refs is a ushort, so refs << 16 is negative
+                // for anything from 0x8000 up, and a negative length slips past the
+                // clamp below straight into Encoding.GetString.
+                len = (int)(((uint)refs << 16) | Word(slot * 2 + 2));
+                slot++;
             }
-            if (offset + len > data.Length) len = Math.Max(0, data.Length - offset);
-            result[i] = enc.GetString(data, offset, len);
+            if (len < 0 || offset + (long)len > data.Length) len = Math.Max(0, data.Length - offset);
+            result[index] = enc.GetString(data, offset, len);
             offset += len;
         }
         return result;

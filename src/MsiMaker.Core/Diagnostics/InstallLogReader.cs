@@ -133,25 +133,38 @@ public static partial class InstallLogReader
             + "automatically. In Intune, 3010 should be configured as a soft-reboot return code."),
     ];
 
+    /// <summary>
+    /// A verbose install log is routinely hundreds of megabytes, and the one
+    /// someone brings to be explained is the pathological one. Streamed a line at
+    /// a time rather than materialised as a string[], and matched with
+    /// NonBacktracking so a single very long line cannot take exponential time -
+    /// every pattern here is compatible with it.
+    /// </summary>
+    private static readonly RegexOptions MatchOptions =
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking;
+
     /// <summary>The first real failure in the log, and anything else worth knowing.</summary>
     public static List<LogFinding> Read(string logPath)
     {
-        string[] lines = File.ReadAllLines(logPath);
         var findings = new List<LogFinding>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
+        var regexes = Rules.Select(r => new Regex(r.Pattern, MatchOptions)).ToArray();
 
-        foreach (var rule in Rules)
+        // One pass over the file rather than one per rule: thirteen passes over a
+        // half-gigabyte log is thirteen reads of it.
+        int lineNumber = 0;
+        foreach (string line in File.ReadLines(logPath))
         {
-            var regex = new Regex(rule.Pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-            for (int i = 0; i < lines.Length; i++)
-            {
-                if (!regex.IsMatch(lines[i])) continue;
-                if (!seen.Add(rule.Code)) break;
+            lineNumber++;
+            if (seen.Count == Rules.Length) break;
 
+            for (int i = 0; i < Rules.Length; i++)
+            {
+                if (seen.Contains(Rules[i].Code) || !regexes[i].IsMatch(line)) continue;
+                seen.Add(Rules[i].Code);
                 findings.Add(new LogFinding(
-                    rule.Code, rule.Summary, rule.Meaning, rule.Fix,
-                    Tidy(lines[i]), i + 1));
-                break;
+                    Rules[i].Code, Rules[i].Summary, Rules[i].Meaning, Rules[i].Fix,
+                    Tidy(line), lineNumber));
             }
         }
 
@@ -167,22 +180,23 @@ public static partial class InstallLogReader
     /// <summary>The action Windows Installer was running when it gave up.</summary>
     public static string? FailingAction(string logPath)
     {
-        string[] lines = File.ReadAllLines(logPath);
         var ended = ActionEnded();
+        string? last = null;
 
-        for (int i = lines.Length - 1; i >= 0; i--)
+        // Streamed forwards, keeping the most recent match, rather than reading
+        // the whole log into memory to walk it backwards.
+        foreach (string line in File.ReadLines(logPath))
         {
-            var match = ended.Match(lines[i]);
-            if (match.Success && match.Groups[2].Value == "3")
-            {
-                string action = match.Groups[1].Value;
-                // INSTALL and InstallFinalize are the outer frames; the action
-                // that actually failed is the innermost one that returned 3.
-                if (action is "INSTALL" or "InstallFinalize" or "InstallExecute") continue;
-                return action;
-            }
+            var match = ended.Match(line);
+            if (!match.Success || match.Groups[2].Value != "3") continue;
+
+            string action = match.Groups[1].Value;
+            // INSTALL and InstallFinalize are the outer frames; the action that
+            // actually failed is the innermost one that returned 3.
+            if (action is "INSTALL" or "InstallFinalize" or "InstallExecute") continue;
+            last = action;
         }
-        return null;
+        return last;
     }
 
     private static string Tidy(string line)

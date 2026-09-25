@@ -46,20 +46,58 @@ public sealed class CfbReader
     /// </summary>
     public IReadOnlyList<string> SubStorages { get; }
 
+    /// <summary>
+    /// How many bytes all the streams together may expand to.
+    ///
+    /// Nothing stops two directory entries claiming the same sector chain, so a
+    /// file can describe far more stream content than it contains: a 1 MB input
+    /// whose directory is also its payload yields thousands of streams and gigabytes
+    /// of retained data, and every byte of it is a legal read. A real MSI expands to
+    /// a little less than its own size, so a generous multiple still catches this.
+    /// </summary>
+    private long _budget;
+
+    private void Spend(long bytes)
+    {
+        _budget -= bytes;
+        if (_budget < 0)
+            throw new InvalidDataException(
+                "Compound file expands to far more data than it contains, which means its sector "
+                + "chains overlap. The file is malformed.");
+    }
+
     public CfbReader(byte[] data)
     {
         _data = data;
+        _budget = Math.Max(16L * 1024 * 1024, 20L * data.Length);
         if (data.Length < 512 || !data.AsSpan(0, 8).SequenceEqual(Cfb.Signature))
             throw new InvalidDataException("Not a compound file (bad signature) - this is not an MSI.");
 
+        // MS-CFB allows only these, and the check is not pedantry: the shift is a
+        // raw file field, and 1 << 26 turns a 512-byte file into a multi-gigabyte
+        // _fat allocation below before anything else has a chance to reject it.
         _sectorSize = 1 << BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(0x1E));
         _miniSectorSize = 1 << BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(0x20));
+        if (_sectorSize is not (512 or 4096))
+            throw new InvalidDataException(
+                $"Compound file declares a {_sectorSize}-byte sector; only 512 and 4096 are valid. "
+                + "The file is malformed.");
+        if (_miniSectorSize != 64)
+            throw new InvalidDataException(
+                $"Compound file declares a {_miniSectorSize}-byte mini sector; only 64 is valid. "
+                + "The file is malformed.");
         uint numFatSectors = ReadU32(0x2C);
         uint dirStart = ReadU32(0x30);
         _miniCutoff = ReadU32(0x38);
         uint miniFatStart = ReadU32(0x3C);
         uint difatStart = ReadU32(0x44);
         uint numDifatSectors = ReadU32(0x48);
+
+        // A sector count larger than the file cannot be honest, and both counts
+        // are used as loop and allocation bounds below.
+        uint maxSectors = (uint)(data.Length / _sectorSize) + 1;
+        if (numFatSectors > maxSectors) numFatSectors = maxSectors;
+        if (numDifatSectors > maxSectors) numDifatSectors = maxSectors;
 
         // DIFAT: 109 entries live in the header, the remainder in a chain of DIFAT sectors.
         var fatSectors = new List<uint>();
@@ -68,9 +106,13 @@ public sealed class CfbReader
             uint s = ReadU32(0x4C + i * 4);
             if (s <= Cfb.MaxRegSect) fatSectors.Add(s);
         }
+        // ReadChain and ReadMiniChain both guard against a sector chain that loops;
+        // this one did not, and a DIFAT sector whose last entry points at itself
+        // spins here forever - no exception, no output, nothing a caller can catch.
         uint difat = difatStart;
         int perDifat = _sectorSize / 4 - 1;
-        for (uint i = 0; i < numDifatSectors && difat <= Cfb.MaxRegSect; i++)
+        var seenDifat = new HashSet<uint>();
+        for (uint i = 0; i < numDifatSectors && difat <= Cfb.MaxRegSect && seenDifat.Add(difat); i++)
         {
             int off = SectorOffset(difat);
             for (int j = 0; j < perDifat && fatSectors.Count < numFatSectors; j++)
@@ -124,7 +166,11 @@ public sealed class CfbReader
         {
             var span = dir.AsSpan(i * 128, 128);
             if ((CfbEntryType)span[66] != CfbEntryType.Stream) continue;
-            int nameLen = BinaryPrimitives.ReadUInt16LittleEndian(span[64..]);
+            // MS-CFB caps the name at 64 bytes; the entry itself is only 128, so a
+        // larger value slices past it or silently reads the CLSID and size fields
+        // as though they were part of the name.
+        int nameLen = BinaryPrimitives.ReadUInt16LittleEndian(span[64..]);
+        if (nameLen > 64) continue;
             if (nameLen < 2) continue;
             string name = Encoding.Unicode.GetString(span[..(nameLen - 2)]);
             uint start = BinaryPrimitives.ReadUInt32LittleEndian(span[116..]);
@@ -138,7 +184,24 @@ public sealed class CfbReader
 
     private uint ReadU32(int offset) => BinaryPrimitives.ReadUInt32LittleEndian(_data.AsSpan(offset));
 
-    private int SectorOffset(uint sector) => (int)((sector + 1) * (uint)_sectorSize);
+    /// <summary>
+    /// Byte offset of a sector, computed in 64 bits and range-checked.
+    ///
+    /// In 32 bits (sector + 1) * sectorSize wraps, and the wrapped value is a
+    /// perfectly legal index - so instead of throwing, the reader silently serves
+    /// bytes from somewhere else in the file as the contents of a stream. That is
+    /// the only failure in this parser that produces wrong data rather than an
+    /// error, which makes it the worst one.
+    /// </summary>
+    private int SectorOffset(uint sector)
+    {
+        long offset = ((long)sector + 1) * _sectorSize;
+        if (offset < 0 || offset + _sectorSize > _data.Length)
+            throw new InvalidDataException(
+                $"Compound file points at sector {sector}, which lies outside the file. "
+                + "The file is malformed or truncated.");
+        return (int)offset;
+    }
 
     private byte[] ReadChain(uint start, long size = -1)
     {
@@ -149,6 +212,7 @@ public sealed class CfbReader
         {
             int off = SectorOffset(s);
             if (off < 0 || off + _sectorSize > _data.Length) break;
+            Spend(_sectorSize);
             ms.Write(_data, off, _sectorSize);
             s = s < _fat.Length ? _fat[s] : Cfb.EndOfChain;
         }
@@ -163,13 +227,18 @@ public sealed class CfbReader
         var seen = new HashSet<uint>();
         while (s <= Cfb.MaxRegSect && seen.Add(s))
         {
-            int off = (int)s * _miniSectorSize;
-            if (off + _miniSectorSize > _miniStream.Length) break;
-            ms.Write(_miniStream, off, _miniSectorSize);
+            // In 32 bits this wraps negative for a large sector number, and the
+            // guard below only had an upper bound - the sibling ReadChain has both.
+            long off = (long)s * _miniSectorSize;
+            if (off < 0 || off + _miniSectorSize > _miniStream.Length) break;
+            Spend(_miniSectorSize);
+            ms.Write(_miniStream, (int)off, _miniSectorSize);
             s = s < _miniFat.Length ? _miniFat[s] : Cfb.EndOfChain;
         }
         byte[] b = ms.ToArray();
-        return size < b.Length ? b[..(int)size] : b;
+        // size comes from the directory entry unchecked; a negative one indexes
+        // backwards. ReadChain guards this and this did not.
+        return size >= 0 && size < b.Length ? b[..(int)size] : b;
     }
 }
 

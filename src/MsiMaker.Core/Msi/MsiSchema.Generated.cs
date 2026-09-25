@@ -20,6 +20,7 @@ public static partial class MsiSchema
         ["Shortcut"] = [("Shortcut", 0x2D48), ("Directory_", 0x0D48), ("Name", 0x0F80), ("Component_", 0x0D48), ("Target", 0x0D48), ("Arguments", 0x1DFF), ("Description", 0x1FFF), ("Hotkey", 0x1502), ("Icon_", 0x1D48), ("IconIndex", 0x1502), ("ShowCmd", 0x1502), ("WkDir", 0x1D48), ("DisplayResourceDLL", 0x1DFF), ("DisplayResourceId", 0x1502), ("DescriptionResourceDLL", 0x1DFF), ("DescriptionResourceId", 0x1502)],
         ["RemoveFile"] = [("FileKey", 0x2D48), ("Component_", 0x0D48), ("FileName", 0x1FFF), ("DirProperty", 0x0D48), ("InstallMode", 0x0502)],
         ["CreateFolder"] = [("Directory_", 0x2D48), ("Component_", 0x2D48)],
+        ["MsiLockPermissionsEx"] = [("MsiLockPermissionsEx", 0x2D48), ("LockObject", 0x0D48), ("Table", 0x0D20), ("SDDLText", 0x0D00), ("Condition", 0x1DFF)],
         ["CustomAction"] = [("Action", 0x2D48), ("Type", 0x0502), ("Source", 0x1D48), ("Target", 0x1DFF), ("ExtendedType", 0x1104)],
         ["Icon"] = [("Name", 0x2D48), ("Data", 0x0900)],
         ["Binary"] = [("Name", 0x2D48), ("Data", 0x0900)],

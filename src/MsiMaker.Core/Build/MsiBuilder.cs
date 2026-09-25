@@ -26,6 +26,13 @@ public sealed record BuildResult(
 public static class MsiBuilder
 {
     // Custom action type bits, confirmed against WiX output (3154 = 18|64|1024|2048).
+    /// <summary>
+    /// msidbCustomActionTypeTextData + Error: shows the Target text and ends the
+    /// install. No helper DLL, which matters - a binary custom action would have to
+    /// be compiled per architecture and would undo the point of a managed builder.
+    /// </summary>
+    private const int CaShowTextAndStop = 19;
+
     private const int CaExeFromFile = 18;
     private const int CaExeInDirectory = 34;
     private const int CaIgnoreReturn = 64;
@@ -43,6 +50,88 @@ public static class MsiBuilder
     private const int ComponentIs64Bit = 256;
     private const int ComponentRegistryKeyPath = 4;
     private const int FileVital = 512;
+
+    /// <summary>
+    /// Hands out sequence numbers from the gap between two standard actions, and
+    /// refuses rather than overrunning into the next one.
+    ///
+    /// Overrunning is silent, which is why this is a type and not an int. An
+    /// uninstall action that spills past RemoveFiles (3500) runs after the payload
+    /// it needs has already been deleted: with IgnoreExitCode it fails invisibly
+    /// and msiexec still returns 0, and without it the uninstall returns 1603 and
+    /// rolls back, leaving a product its own package can no longer remove.
+    /// </summary>
+    private sealed class SequenceBand(string purpose, int first, int limit)
+    {
+        private readonly int _first = first;
+        private int _next = first;
+
+        public int Take(int count = 1)
+        {
+            if (_next + count > limit)
+                throw new InvalidOperationException(
+                    $"Too many {purpose} actions: sequence slots {_first}-{limit - 1} are full. "
+                    + "Windows Installer orders actions by number, and there is no room left before "
+                    + "the next standard action, so another one here would run at the wrong point in "
+                    + "the install.");
+
+            int value = _next;
+            _next += count;
+            return value;
+        }
+    }
+
+    /// <summary>Set this on the command line to be told what the package accepts.</summary>
+    private const string HelpProperty = "HELP";
+    private const string HelpActionId = "ca_help";
+
+    /// <summary>
+    /// The text the HELP dialog shows: what this package is, and every value it
+    /// will accept on the command line, with defaults.
+    /// </summary>
+    private static string HelpText(MsiProject project, bool is64)
+    {
+        var text = new StringBuilder();
+        text.AppendLine($"{project.ProductName} {project.ComparableVersion}");
+        text.AppendLine();
+        text.AppendLine("Install:    msiexec /i \"" + Sanitised(project) + ".msi\" /qn");
+        text.AppendLine("Uninstall:  msiexec /x \"" + Sanitised(project) + ".msi\" /qn");
+        text.AppendLine();
+        text.AppendLine("Values you can set on the command line, as NAME=value:");
+        text.AppendLine();
+        text.AppendLine("  INSTALLFOLDER   Where to install. Default:");
+        text.AppendLine($"                  {TargetInstallDirectory(project, is64)}");
+
+        foreach (var parameter in project.Parameters)
+        {
+            text.AppendLine();
+            text.AppendLine($"  {parameter.Name}");
+            if (!string.IsNullOrWhiteSpace(parameter.Description))
+                text.AppendLine($"                  {parameter.Description}");
+            text.AppendLine($"                  Default: {(string.IsNullOrEmpty(parameter.Default)
+                ? "(empty)" : parameter.Default)}");
+        }
+
+        text.AppendLine();
+        text.AppendLine("Quoting: msiexec needs NAME=\"a value with spaces\" quoted as shown,");
+        text.AppendLine("with the quotes around the value only, not around the whole pair.");
+        return text.ToString();
+    }
+
+    private static string Sanitised(MsiProject project) => MsiProject.Sanitize(project.ProductName);
+
+    /// <summary>
+    /// SYSTEM and Administrators keep full control, everyone else gets read and
+    /// execute, and the leading "P" stops anything being inherited from the
+    /// parent - which is the entire point. Without it the permissive ACEs that
+    /// C:\ProgramData hands down are still there alongside these.
+    ///
+    /// 0x1200a9 is FILE_GENERIC_READ | FILE_GENERIC_EXECUTE. Written numerically
+    /// because the SDDL shorthand for it varies with the object type, and an SDDL
+    /// string Windows Installer cannot parse fails the install at CreateFolders.
+    /// </summary>
+    private const string LockedFolderSddl =
+        "D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;BU)";
 
     private const string DowngradeProperty = "MSIMAKERDOWNGRADE";
     private const string UpgradeProperty = "MSIMAKERUPGRADE";
@@ -83,7 +172,18 @@ public static class MsiBuilder
         db.SetProperty("ProductLanguage", project.Language.ToString());
         db.SetProperty("ALLUSERS", "1");                       // per-machine; Intune installs as SYSTEM
         db.SetProperty("MSIINSTALLPERUSER", "0");
-        db.SetProperty("SecureCustomProperties", $"{DowngradeProperty};{UpgradeProperty}");
+        // A public property set on the command line is dropped when the install
+        // elevates, unless it is listed here. That failure is silent: the property
+        // is simply empty by the time the deferred action reads it.
+        var secure = new List<string> { DowngradeProperty, UpgradeProperty, HelpProperty };
+        foreach (var parameter in project.Parameters)
+        {
+            if (!string.IsNullOrEmpty(parameter.Default))
+                db.SetProperty(parameter.Name, parameter.Default!);
+            secure.Add(parameter.Name);
+        }
+
+        db.SetProperty("SecureCustomProperties", string.Join(";", secure));
 
         var arp = project.Arp;
         if (!string.IsNullOrWhiteSpace(arp.HelpLink)) db.SetProperty("ARPHELPLINK", arp.HelpLink!);
@@ -93,6 +193,38 @@ public static class MsiBuilder
         if (arp.NoModify) db.SetProperty("ARPNOMODIFY", "1");
         if (arp.NoRepair) db.SetProperty("ARPNOREPAIR", "1");
         if (arp.NoRemove) db.SetProperty("ARPNOREMOVE", "1");
+
+        // A package that runs a vendor's own installer EXE is a wrapper: the EXE
+        // writes its own Programs entry, so a second one from the wrapper is the
+        // app listed twice, usually at two different versions. Hide the wrapper by
+        // default in that case; a package that installs its own files is the only
+        // installer there is, so it stays visible.
+        var installerRuns = project.Run
+            .Where(r => r.When is RunWhen.Install or RunWhen.Both && !string.IsNullOrWhiteSpace(r.ExePath))
+            .ToList();
+        bool wrapsAnInstaller = installerRuns.Count > 0;
+
+        // A wrapped installer decides where it lands from its own command line, not
+        // from the Install folder here. If the arguments name no directory, the
+        // location is whatever the vendor defaults to - which is the surprise when
+        // someone removes the /D= or /DIR= switch and nothing asks where to install.
+        foreach (var run in installerRuns)
+            if (!InstallerDetective.MentionsInstallDirectory(run.Arguments) && !run.UseInstallerDefaultLocation)
+                warnings.Add($"Run action '{run.Id}' launches an installer with no install-directory "
+                             + "switch and no decision to use the installer's default, so where it "
+                             + "installs has not been settled. Choose a location when building, or add "
+                             + "the vendor's directory switch (for example /D=, /DIR=, INSTALLDIR= or "
+                             + "APPDIR=) with the path you want.");
+        bool hide = arp.HideFromProgramsList ?? wrapsAnInstaller;
+        if (hide)
+        {
+            db.SetProperty("ARPSYSTEMCOMPONENT", "1");
+            if (arp.HideFromProgramsList is null)
+                warnings.Add("This package runs a vendor installer that registers its own Programs entry, "
+                             + "so the wrapper is hidden from Programs to avoid listing the app twice. It "
+                             + "is still tracked and removable by ProductCode. Set HideFromProgramsList "
+                             + "false to show it anyway.");
+        }
 
         // ------------------------------------------------------------- upgrade
         // Row 1 removes every earlier version. Row 2 only detects a newer one so
@@ -104,6 +236,10 @@ public static class MsiBuilder
         db.Std("LaunchCondition").Add(
             $"NOT {DowngradeProperty}",
             $"A newer version of {project.ProductName} is already installed. Setup will now exit.");
+
+        // msiexec keeps /? and /help for itself, so a package cannot be asked for
+        // help with a switch - a property is the only channel it leaves open.
+        db.Std("CustomAction").Add(HelpActionId, CaShowTextAndStop, null, HelpText(project, is64), null);
 
         // ----------------------------------------------------------- directories
         var directory = db.Std("Directory");
@@ -122,7 +258,7 @@ public static class MsiBuilder
         string parent = rootId;
         if (!string.IsNullOrWhiteSpace(project.ManufacturerFolder))
         {
-            directory.Add("MFRFOLDER", parent, DefaultDir(project.ManufacturerFolder!));
+            directory.Add("MFRFOLDER", parent, DefaultDir(MsiProject.Sanitize(project.ManufacturerFolder!)));
             parent = "MFRFOLDER";
         }
         directory.Add("INSTALLFOLDER", parent, DefaultDir(project.EffectiveInstallFolder));
@@ -199,7 +335,14 @@ public static class MsiBuilder
             // the version is what drives replacement, and a hash row is invalid.
             if (fileVersion is null)
             {
+                // MD5 is not a security choice here. The MsiFileHash table is
+                // defined by the MSI format as a 128-bit MD5 stored as four 32-bit
+                // integers, and Windows Installer compares it to decide whether a
+                // file needs replacing. Any other algorithm produces a table
+                // Windows Installer will not accept.
+#pragma warning disable CA5351
                 byte[] md5 = MD5.HashData(bytes);
+#pragma warning restore CA5351
                 fileHash.Add(fileId, 0,
                     BitConverter.ToInt32(md5, 0), BitConverter.ToInt32(md5, 4),
                     BitConverter.ToInt32(md5, 8), BitConverter.ToInt32(md5, 12));
@@ -281,7 +424,15 @@ public static class MsiBuilder
             byte[] xmlBytes = TaskXml.Encode(xml);
 
             sequence++;
-            string taskFileName = MsiProject.Sanitize(task.Name).Replace(' ', '_') + ".xml";
+            // The MSI keys are made unique below, but the file *name* is what
+            // lands on disk, and two task XMLs - or a task XML and a payload file
+            // of the same name - would be written to one path in INSTALLFOLDER.
+            // Windows Installer accepts that without complaint: the tables load,
+            // the install returns 0, and the author's own file has been replaced
+            // by generated XML, with two components claiming a key path neither
+            // of them owns.
+            string taskFileName = UniqueTarget(
+                MsiProject.Sanitize(task.Name).Replace(' ', '_') + ".xml", fileIdByTarget);
             string taskFileId = UniqueId("f_task_" + taskFileName, identifiers);
             string taskComponentId = UniqueId("c_task_" + taskFileName, componentIds);
             Guid taskGuid = DeterministicGuid.Create(project.UpgradeCode, "Component/task/" + task.FullName);
@@ -290,8 +441,11 @@ public static class MsiBuilder
                           componentAttributes, null, taskFileId);
             featureComponents.Add("MainFeature", taskComponentId);
             file.Add(taskFileId, taskComponentId, taskFileName, xmlBytes.Length, null, null, FileVital, sequence);
+            fileIdByTarget[taskFileName] = taskFileId;
 
+#pragma warning disable CA5351 // MsiFileHash is MD5 by definition; see the note above.
             byte[] taskMd5 = MD5.HashData(xmlBytes);
+#pragma warning restore CA5351
             fileHash.Add(taskFileId, 0,
                 BitConverter.ToInt32(taskMd5, 0), BitConverter.ToInt32(taskMd5, 4),
                 BitConverter.ToInt32(taskMd5, 8), BitConverter.ToInt32(taskMd5, 12));
@@ -334,8 +488,13 @@ public static class MsiBuilder
         //     the old build being removed during an upgrade;
         //   - deferred, after RemoveExistingProducts, which runs elevated and so
         //     still works when the immediate pass could not.
-        const int immediateCloseSequence = 1490;   // after InstallValidate (1400)
-        const int deferredCloseSequence = 1550;    // after RemoveExistingProducts (1501)
+        // Bounded bands rather than a bare counter: with more than ten executables
+        // the old fixed start of 1490 stepped straight over InstallInitialize
+        // (1500) and RemoveExistingProducts (1501), so the later processes were
+        // killed after the old build had already been removed - which is the one
+        // thing the immediate pass exists to prevent, and it raised no error.
+        var immediateClose = new SequenceBand("close-process", 1410, 1500);
+        var deferredClose = new SequenceBand("deferred close-process", 1550, 1600);
 
         foreach (var (action, condition, seq) in MsiSchema.Sequences["InstallExecuteSequence"])
             installSequence.Add(action, condition, seq);
@@ -345,13 +504,17 @@ public static class MsiBuilder
             foreach (var (action, condition, seq) in MsiSchema.Sequences[table]) t.Add(action, condition, seq);
         }
 
+        // Ahead of every standard action, including LaunchConditions: asking what
+        // the package accepts should work even when the package would refuse to
+        // install on this machine. In the UI sequence it is a dialog; under /qn
+        // there is nobody to show it to, so it goes to the log instead.
+        installSequence.Add(HelpActionId, HelpProperty, 1);
+        db.Std("InstallUISequence").Add(HelpActionId, HelpProperty, 1);
+
         if (processesToClose.Count > 0)
         {
             EnsureSystemDirectory();
             var closeActions = db.Std("CustomAction");
-            int immediateSlot = immediateCloseSequence;
-            int deferredSlot = deferredCloseSequence;
-
             foreach (string image in processesToClose)
             {
                 // No condition: files must be free on install, upgrade and
@@ -363,23 +526,26 @@ public static class MsiBuilder
                 closeActions.Add(immediate,
                     CaExeInDirectory | CaIgnoreReturn,
                     systemDirId, command, null);
-                installSequence.Add(immediate, null, immediateSlot);
-                immediateSlot++;
+                installSequence.Add(immediate, null, immediateClose.Take());
 
                 string deferred = UniqueId($"ca_close_deferred_{image}", identifiers);
                 closeActions.Add(deferred,
                     CaExeInDirectory | CaDeferred | CaNoImpersonate | CaIgnoreReturn,
                     systemDirId, command, null);
-                installSequence.Add(deferred, null, deferredSlot);
-                deferredSlot++;
+                installSequence.Add(deferred, null, deferredClose.Take());
             }
         }
+
+        // Run actions and scheduled tasks compete for the same two windows, so
+        // each window is one counter shared between them. Two counters that both
+        // started at 3400 is how ca_<id>_uninstall and ca_task_delete_<name> came
+        // to share a sequence number, with undefined relative order.
+        var afterInstallFiles = new SequenceBand("install-time", 4010, 4500);
+        var beforeRemoveFiles = new SequenceBand("uninstall-time", 3310, 3500);
 
         if (project.Run.Count > 0)
         {
             var customAction = db.Std("CustomAction");
-            int installSlot = 4100;    // after InstallFiles (4000), before InstallFinalize (6600)
-            int uninstallSlot = 3400;  // before RemoveFiles (3500), while the payload still exists
 
             foreach (var run in project.Run)
             {
@@ -442,16 +608,17 @@ public static class MsiBuilder
                 {
                     string condition = Combine(run.Condition, "NOT REMOVE")!;
 
-                    // The rollback must sit immediately ahead of the action it
-                    // undoes; rollback actions replay in reverse order.
+                    // Two adjacent slots so the rollback immediately precedes the
+                    // action it undoes, whatever follows.
+                    int slot = afterInstallFiles.Take(run.HasRollback ? 2 : 1);
+
                     if (run.HasRollback)
                     {
                         string rollbackId = UniqueId($"ca_{run.Id}_rollback", identifiers);
                         customAction.Add(rollbackId,
                             rollbackBaseType | CaRollback | CaDeferred | CaNoImpersonate | CaIgnoreReturn,
                             rollbackSource, rollbackTarget, null);
-                        installSequence.Add(rollbackId, condition, installSlot);
-                        installSlot += 1;
+                        installSequence.Add(rollbackId, condition, slot++);
                     }
                     else
                     {
@@ -462,15 +629,14 @@ public static class MsiBuilder
 
                     string id = UniqueId($"ca_{run.Id}_install", identifiers);
                     customAction.Add(id, type, source, target, null);
-                    installSequence.Add(id, condition, installSlot);
-                    installSlot += 10;
+                    installSequence.Add(id, condition, slot);
                 }
                 if (run.When is RunWhen.Uninstall or RunWhen.Both)
                 {
                     string id = UniqueId($"ca_{run.Id}_uninstall", identifiers);
                     customAction.Add(id, type, source, target, null);
-                    installSequence.Add(id, Combine(run.Condition, "REMOVE~=\"ALL\""), uninstallSlot);
-                    uninstallSlot += 10;
+                    installSequence.Add(id, Combine(run.Condition, "REMOVE~=\"ALL\""),
+                                        beforeRemoveFiles.Take());
                 }
             }
         }
@@ -478,8 +644,6 @@ public static class MsiBuilder
         if (taskFiles.Count > 0)
         {
             var customAction = db.Std("CustomAction");
-            int createSlot = 4300;   // after InstallFiles, so the XML is on disk
-            int deleteSlot = 3400;   // before RemoveFiles, while it still is
 
             foreach (var (task, taskFileId) in taskFiles)
             {
@@ -492,8 +656,8 @@ public static class MsiBuilder
                     systemDirId,
                     $"schtasks.exe /Delete /TN \"{task.FullName}\" /F",
                     null);
-                installSequence.Add(undo, "NOT REMOVE", createSlot);
-                createSlot += 1;
+                int slot = afterInstallFiles.Take(3);
+                installSequence.Add(undo, "NOT REMOVE", slot++);
 
                 string create = UniqueId($"ca_task_create_{task.Name}", identifiers);
                 customAction.Add(create,
@@ -501,19 +665,86 @@ public static class MsiBuilder
                     systemDirId,
                     $"schtasks.exe /Create /TN \"{task.FullName}\" /XML \"[#{taskFileId}]\" /F",
                     null);
-                installSequence.Add(create, "NOT REMOVE", createSlot);
-                createSlot += 10;
+                installSequence.Add(create, "NOT REMOVE", slot++);
+
+                // Pin the ACL on the task object we just registered. A SYSTEM task
+                // is stored as a file under %SystemRoot%\System32\Tasks, and the
+                // Task Scheduler service already gives it a sensible descriptor -
+                // but the file still inherits from its folder, so a folder created
+                // with hostile inheritable permissions (an attacker who got there
+                // first, say) could reach the task. Breaking inheritance and fixing
+                // it to SYSTEM, Administrators and read-only for everyone else
+                // removes that path, and Task Scheduler still reads and runs the
+                // task afterwards. SIDs, not names, because Users/Administrators
+                // are localised. Only the file we created is touched, never the
+                // shared vendor folder. Best-effort: a failure here should not fail
+                // the install, since the service's own descriptor is the baseline.
+                //
+                // [System64Folder]/[SystemFolder] and [# ] are resolved when the
+                // deferred script is written, so the path is baked in by run time.
+                string secureTask = UniqueId($"ca_task_secure_{task.Name}", identifiers);
+                customAction.Add(secureTask,
+                    CaExeInDirectory | CaDeferred | CaNoImpersonate | CaIgnoreReturn,
+                    systemDirId,
+                    $"icacls.exe \"[{systemDirId}]Tasks{task.FullName}\" /inheritance:r "
+                    + "/grant:r *S-1-5-18:(F) *S-1-5-32-544:(F) *S-1-5-32-545:(RX)",
+                    null);
+                installSequence.Add(secureTask, "NOT REMOVE", slot);
 
                 // Deleting is allowed to fail: the task may already be gone.
+                //
+                // The task's folder is deliberately left behind. schtasks has no
+                // command that removes one, and a folder named for the vendor is
+                // shared: on a machine with the vendor's own software installed,
+                // "\HP" holds their tasks too. An empty folder is untidy; removing
+                // someone else's tasks is not.
                 string delete = UniqueId($"ca_task_delete_{task.Name}", identifiers);
                 customAction.Add(delete,
                     CaExeInDirectory | CaDeferred | CaNoImpersonate | CaIgnoreReturn,
                     systemDirId,
                     $"schtasks.exe /Delete /TN \"{task.FullName}\" /F",
                     null);
-                installSequence.Add(delete, "REMOVE~=\"ALL\"", deleteSlot);
-                deleteSlot += 10;
+                installSequence.Add(delete, "REMOVE~=\"ALL\"", beforeRemoveFiles.Take());
             }
+        }
+
+        // ------------------------------------------------------ folder permissions
+        //
+        // A custom action running as SYSTEM, and a scheduled task running as
+        // SYSTEM, both execute a file out of the install folder. Under
+        // %ProgramFiles% that is fine - Users get read and execute there and
+        // nothing else. Under C:\ProgramData it is not: the default ACL grants
+        // Users container-inherit write and add-subdirectory, and CREATOR OWNER
+        // full control, so a standard user can drop a DLL beside the executable
+        // and have SYSTEM load it. No race and no pre-creation needed.
+        if (project.ShouldLockInstallFolder)
+        {
+            // MsiLockPermissionsEx applies to a CreateFolder row, not to the
+            // Directory row, so the folder has to be explicitly created by a
+            // component before it can be locked.
+            string lockComponentId = UniqueId("c_installfolder", componentIds);
+            Guid lockGuid = DeterministicGuid.Create(project.UpgradeCode, "Component/installfolder");
+
+            component.Add(lockComponentId, DeterministicGuid.Format(lockGuid), "INSTALLFOLDER",
+                          componentAttributes, null, null);
+            featureComponents.Add("MainFeature", lockComponentId);
+            db.Std("CreateFolder").Add("INSTALLFOLDER", lockComponentId);
+            db.Std("MsiLockPermissionsEx").Add(
+                UniqueId("lock_installfolder", identifiers),
+                "INSTALLFOLDER", "CreateFolder", LockedFolderSddl, null);
+
+            if (project.RootIsUserWritable && project.LockInstallFolder is null)
+                warnings.Add("Installing under ProgramData, where the default permissions let any user "
+                             + "write. The install folder is locked to SYSTEM, Administrators and "
+                             + "read-only for everyone else. Set LockInstallFolder false if the "
+                             + "application needs to write there itself.");
+        }
+        else if (project.RootIsUserWritable && (project.Run.Count > 0 || project.Tasks.Count > 0))
+        {
+            warnings.Add("This package runs a program as SYSTEM from a folder under ProgramData, which "
+                         + "ordinary users can write to, and LockInstallFolder is set false. A user who "
+                         + "puts a DLL next to that program gets it loaded as SYSTEM. Remove "
+                         + "LockInstallFolder, or install under ProgramFiles instead.");
         }
 
         // ------------------------------------------------------ feature and media
@@ -589,7 +820,7 @@ public static class MsiBuilder
         };
 
         var parts = new List<string> { root };
-        if (!string.IsNullOrWhiteSpace(project.ManufacturerFolder)) parts.Add(project.ManufacturerFolder!);
+        if (!string.IsNullOrWhiteSpace(project.ManufacturerFolder)) parts.Add(MsiProject.Sanitize(project.ManufacturerFolder!));
         parts.Add(project.EffectiveInstallFolder);
         return string.Join("\\", parts);
     }
@@ -624,6 +855,24 @@ public static class MsiBuilder
     /// MSI identifiers allow letters, digits, underscore and period, and must not
     /// start with a digit. Collisions get a short hash suffix.
     /// </summary>
+    /// <summary>
+    /// A file name that no other file in the install folder already uses. Unlike
+    /// UniqueId this guards a path on disk, not a table key - the two are
+    /// different namespaces and only the first was being kept distinct.
+    /// </summary>
+    private static string UniqueTarget(string name, Dictionary<string, string> taken)
+    {
+        if (!taken.ContainsKey(name)) return name;
+
+        string stem = Path.GetFileNameWithoutExtension(name);
+        string extension = Path.GetExtension(name);
+        for (int n = 2; ; n++)
+        {
+            string candidate = $"{stem}_{n}{extension}";
+            if (!taken.ContainsKey(candidate)) return candidate;
+        }
+    }
+
     private static string UniqueId(string seed, HashSet<string> taken)
     {
         var sb = new StringBuilder();

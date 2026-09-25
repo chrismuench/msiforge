@@ -1,3 +1,7 @@
+using System;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
@@ -6,7 +10,8 @@ using Avalonia.Platform.Storage;
 using MsiMaker.App.ViewModels;
 using MsiMaker.Core.Intune;
 using MsiMaker.Core.Model;
-using MsiMaker.Core.Recipes;
+using MsiMaker.Core.Payload;
+using MsiMaker.Core.Blueprints;
 using MsiMaker.Core.Signing;
 
 namespace MsiMaker.App.Views;
@@ -51,12 +56,13 @@ public partial class MainWindow : Window
         Find<Button>("PickOutputButton").Click += OnPickOutput;
         Find<Button>("BuildButton").Click += OnBuild;
         Find<Button>("OpenOutputButton").Click += OnOpenOutput;
+        Find<Button>("ResultShowFolderButton").Click += OnOpenOutput;
         Find<Button>("OpenProjectButton").Click += OnOpenProject;
         Find<Button>("SaveProjectButton").Click += OnSaveProject;
 
-        Find<Button>("UseRecipeButton").Click += OnUseRecipe;
-        Find<Button>("OpenRecipeUrlButton").Click += OnOpenRecipeUrl;
-        Find<Button>("OpenRecipesFolderButton").Click += OnOpenRecipesFolder;
+        Find<Button>("UseBlueprintButton").Click += OnUseBlueprint;
+        Find<Button>("OpenBlueprintUrlButton").Click += OnOpenBlueprintUrl;
+        Find<Button>("OpenBlueprintsFolderButton").Click += OnOpenBlueprintsFolder;
         Find<Button>("OpenProjectOnLibraryButton").Click += OnOpenProject;
         Find<Button>("StartBlankButton").Click += OnStartBlank;
 
@@ -146,8 +152,8 @@ public partial class MainWindow : Window
 
     private static readonly FilePickerFileType ExeType = new("Installers") { Patterns = ["*.exe", "*.msi"] };
     private static readonly FilePickerFileType MsiType = new("Windows Installer") { Patterns = ["*.msi"] };
-    private static readonly FilePickerFileType BundleType = new("MsiMaker package") { Patterns = ["*.msimaker"] };
-    private static readonly FilePickerFileType ProjectType = new("MsiMaker project") { Patterns = ["*.json"] };
+    private static readonly FilePickerFileType BundleType = new("MsiMaker blueprint (bundles the installer)") { Patterns = ["*.msimaker"] };
+    private static readonly FilePickerFileType ProjectType = new("MsiMaker blueprint (settings only)") { Patterns = ["*.json"] };
     private static readonly FilePickerFileType AnyType = new("All files") { Patterns = ["*"] };
     private static readonly FilePickerFileType PfxType = new("Certificate") { Patterns = ["*.pfx", "*.p12"] };
     private static readonly FilePickerFileType DllType = new("Signing library") { Patterns = ["*.dll"] };
@@ -161,65 +167,137 @@ public partial class MainWindow : Window
     private void ShowTab(int index) => _model.CurrentStep = index;
 
     /// <summary>
-    /// Turns a recipe into the current project.
+    /// Turns a blueprint into the current project.
     ///
-    /// The picker the recipe asks for matters: HP Image Assistant wants the
+    /// The picker the blueprint asks for matters: HP Image Assistant wants the
     /// folder a SoftPaq was extracted into, and opening a file picker for it
     /// sends the admin looking for an installer that does not exist.
     /// </summary>
-    private async void OnUseRecipe(object? sender, RoutedEventArgs e)
+    private async void OnUseBlueprint(object? sender, RoutedEventArgs e)
     {
-        if (_model.SelectedRecipe is not { } row) return;
-        Recipe recipe = row.Model;
+        if (_model.SelectedBlueprint is not { } row) return;
+        Blueprint blueprint = row.Model;
 
+        // What the admin points at, and the friendly name to report it by. A
+        // blueprint that can extract (an HP SoftPaq) takes the downloaded file
+        // directly and is unpacked here into a folder; the rest take a folder or a
+        // file as-is.
         string? payload;
-        if (row.WantsFolder)
+        string payloadName;
+        if (blueprint.Extract is { } extract)
+        {
+            var file = await PickOpen(blueprint.PayloadPrompt, ExeType, AnyType);
+            if (file is null) return;
+            string archive = file.Path.LocalPath;
+            payloadName = Path.GetFileName(archive);
+            Status($"Extracting {payloadName}… this can take a minute.");
+            try
+            {
+                payload = await Task.Run(() => PayloadExtractor.Extract(archive, extract));
+            }
+            catch (Exception ex)
+            {
+                Status($"Could not extract {payloadName}: {ex.Message}");
+                return;
+            }
+        }
+        else if (row.WantsFolder)
         {
             var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
             {
-                Title = recipe.PayloadPrompt,
+                Title = blueprint.PayloadPrompt,
                 AllowMultiple = false,
             });
             payload = folders.Count > 0 ? folders[0].Path.LocalPath : null;
+            if (payload is null) return;
+            payloadName = Path.GetFileName(payload.TrimEnd(Path.DirectorySeparatorChar));
         }
         else
         {
-            var file = await PickOpen(recipe.PayloadPrompt, ExeType, AnyType);
+            var file = await PickOpen(blueprint.PayloadPrompt, ExeType, AnyType);
             payload = file?.Path.LocalPath;
+            if (payload is null) return;
+            payloadName = Path.GetFileName(payload);
         }
-
-        if (payload is null) return;
 
         try
         {
-            _model.UseRecipe(recipe, payload);
+            _model.UseBlueprint(blueprint, payload);
+
+            // The blueprint's template version is a guess frozen when it was
+            // written; the version that matters is the one in the payload the user
+            // actually downloaded. Read it from the file and use it, so the MSI
+            // name and the ProductCode Intune derives from it match reality rather
+            // than a stale number.
+            string? detected = DetectPayloadVersion(blueprint, payload);
+            if (detected is not null) _model.Version = detected;
+
+            // Ask where it installs now, while the app is front of mind, rather
+            // than taking the blueprint's baked-in path as the answer. The blueprint's
+            // path is offered as the suggestion; the choice is still the user's.
+            await ResolveInstallLocations(askEvenWhenAlreadySet: true);
+
             ShowTab(IdentityTab);
 
-            // The template's version is realistic and quite possibly stale, and
-            // the ProductCode Intune detects on is derived from it, so a stale
-            // version is a package that never supersedes the one already out
-            // there. Say so here rather than leaving it in the notes.
-            string caution = recipe.Verified
-                ? ""
-                : " This recipe is untested - install and uninstall it on one device before deploying it.";
-            Status($"Loaded the {recipe.Name} recipe with {Path.GetFileName(payload.TrimEnd(Path.DirectorySeparatorChar))}. "
-                   + $"Set Version to the version you actually downloaded - the template says {row.TemplateVersion}, "
-                   + "and the ProductCode Intune detects on is derived from it." + caution);
+            Status(detected is not null
+                ? $"Loaded the {blueprint.Name} blueprint. Version {detected} read from {payloadName}."
+                : $"Loaded the {blueprint.Name} blueprint with {payloadName}. Could not read a version from it - "
+                  + $"the template says {row.TemplateVersion}; set Version to the one you downloaded, since the "
+                  + "ProductCode Intune detects on is derived from it.");
         }
         catch (Exception ex)
         {
-            Status($"Could not load the {recipe.Name} recipe: {ex.Message}");
+            Status($"Could not load the {blueprint.Name} blueprint: {ex.Message}");
         }
     }
 
     /// <summary>
-    /// Opens a recipe's download page. Only http and https are handed to the
-    /// shell: a recipe can come from a folder anyone on the team can write to,
+    /// The version stamped into the payload the user handed the blueprint, or null
+    /// if none can be read. For a single-file payload it is that file's version
+    /// resource; for a folder payload (an extracted bundle like HP Image Assistant)
+    /// it is the version of the blueprint's own main executable inside the folder.
+    /// </summary>
+    private static string? DetectPayloadVersion(Blueprint blueprint, string payload)
+    {
+        string? exe = null;
+        if (File.Exists(payload))
+        {
+            exe = payload;
+        }
+        else if (Directory.Exists(payload))
+        {
+            // The main executable is the one the blueprint runs or schedules.
+            string? relative = blueprint.Project.Run
+                                   .FirstOrDefault(r => !string.IsNullOrWhiteSpace(r.ExePath))?.ExePath
+                               ?? blueprint.Project.Tasks.FirstOrDefault()?.ExePath;
+            if (!string.IsNullOrWhiteSpace(relative))
+            {
+                string candidate = Path.Combine(payload, relative.Replace('/', '\\').TrimStart('\\'));
+                if (File.Exists(candidate)) exe = candidate;
+            }
+        }
+        if (exe is null) return null;
+
+        try
+        {
+            var analysis = InstallerDetective.Analyse(exe);
+            string? raw = analysis.Version?.ProductVersion ?? analysis.Version?.FileVersion;
+            return string.IsNullOrWhiteSpace(raw) ? null : InstallerDetective.NormaliseVersion(raw);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Opens a blueprint's download page. Only http and https are handed to the
+    /// shell: a blueprint can come from a folder anyone on the team can write to,
     /// and UseShellExecute on an arbitrary scheme would run whatever it names.
     /// </summary>
-    private void OnOpenRecipeUrl(object? sender, RoutedEventArgs e)
+    private void OnOpenBlueprintUrl(object? sender, RoutedEventArgs e)
     {
-        if (_model.SelectedRecipe is not { CanOpenDownloadUrl: true } row) return;
+        if (_model.SelectedBlueprint is not { CanOpenDownloadUrl: true } row) return;
         try
         {
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
@@ -234,9 +312,9 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnOpenRecipesFolder(object? sender, RoutedEventArgs e)
+    private void OnOpenBlueprintsFolder(object? sender, RoutedEventArgs e)
     {
-        string folder = _model.RecipeUserDirectory;
+        string folder = _model.BlueprintUserDirectory;
         try
         {
             // Created on demand: the folder is only read at start-up, so it
@@ -244,7 +322,7 @@ public partial class MainWindow : Window
             if (!Directory.Exists(folder))
             {
                 Directory.CreateDirectory(folder);
-                Status($"Created {folder}. Recipe JSON dropped here is read the next time MsiMaker starts.");
+                Status($"Created {folder}. Blueprint JSON dropped here is read the next time MsiMaker starts.");
             }
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
@@ -275,7 +353,7 @@ public partial class MainWindow : Window
     {
         var file = await PickOpen("Choose an installer to analyse", ExeType, AnyType);
         if (file is null) return;
-        Analyse(file.Path.LocalPath, "");
+        await Analyse(file.Path.LocalPath, "");
     }
 
     private async void OnAddFiles(object? sender, RoutedEventArgs e)
@@ -309,15 +387,15 @@ public partial class MainWindow : Window
         string note = installers.Count > 1
             ? $" {installers.Count} installers added - analysed the first. Use Re-analyse to choose another."
             : "";
-        Analyse(target, added, note);
+        await Analyse(target, added, note);
     }
 
-    private void Analyse(string path, string prefix, string note = "")
+    private async Task Analyse(string path, string prefix, string note = "")
     {
         string name = Path.GetFileName(path);
         try
         {
-            _model.Analyse(path);
+            await _model.AnalyseAsync(path);
             Status($"{prefix} Analysed {name}: {_model.AnalysisSummary}.{note}".TrimStart());
         }
         catch (Exception ex)
@@ -373,10 +451,10 @@ public partial class MainWindow : Window
         }
         var file = await PickOpen("Choose the candidate MSI", MsiType);
         if (file is null) return;
-        RunCheck(_model.PreviousMsi, file.Path.LocalPath);
+        await RunCheck(_model.PreviousMsi, file.Path.LocalPath);
     }
 
-    private void OnRunCheck(object? sender, RoutedEventArgs e)
+    private async void OnRunCheck(object? sender, RoutedEventArgs e)
     {
         if (string.IsNullOrWhiteSpace(_model.PreviousMsi))
         {
@@ -388,14 +466,14 @@ public partial class MainWindow : Window
             Status("Build a package first, or pick a candidate MSI to compare against.");
             return;
         }
-        RunCheck(_model.PreviousMsi, _lastBuiltMsi);
+        await RunCheck(_model.PreviousMsi, _lastBuiltMsi);
     }
 
-    private void RunCheck(string previous, string candidate)
+    private async Task RunCheck(string previous, string candidate)
     {
         try
         {
-            _model.RunUpgradeCheck(previous, candidate);
+            await _model.RunUpgradeCheckAsync(previous, candidate);
             Status(_model.Verdict);
         }
         catch (Exception ex)
@@ -436,17 +514,33 @@ public partial class MainWindow : Window
         Status(_model.SignerFound ? $"Signer found: {_model.SignerStatus}" : "Still no signer installed.");
     }
 
-    private void OnBuild(object? sender, RoutedEventArgs e)
+    private async void OnBuild(object? sender, RoutedEventArgs e)
     {
         // The log is folded away until it has something to say; a build is
         // exactly when it does, whether it succeeded or not.
         Find<Expander>("LogExpander").IsExpanded = true;
+
+        // A fresh attempt starts with no result showing, so the banner never
+        // reflects an earlier build once this one is under way.
+        _model.HasBuildResult = false;
 
         var errors = _model.Project.Validate();
         if (errors.Count > 0)
         {
             foreach (var err in errors) _model.Append($"cannot build: {err}");
             Status($"{errors.Count} problem(s) - see the log.");
+            _model.ShowBuildResult(false, $"{errors.Count} problem(s) stopped the build", "",
+                "The blueprint is not valid yet - see the log below for what to fix.");
+            return;
+        }
+
+        // A wrapped installer with no install-directory switch installs wherever
+        // the vendor defaults, ignoring the Install folder. Rather than build that
+        // silently, ask where it should go and put the switch back. Cancelling the
+        // dialog cancels the build - the choice is deliberate, not skippable.
+        if (!await EnsureWrappedInstallersHaveALocation())
+        {
+            Status("Build cancelled - no install location chosen.");
             return;
         }
 
@@ -461,7 +555,7 @@ public partial class MainWindow : Window
 
         try
         {
-            var result = _model.Build(output);
+            var result = await _model.BuildAsync(output);
             _lastBuiltMsi = result.MsiPath;
             _model.MarkBuilt();
 
@@ -496,28 +590,129 @@ public partial class MainWindow : Window
                 }
             }
 
+            string intunewinNote = "";
             if (_model.EmitIntuneWin)
             {
                 string intunewin = Path.ChangeExtension(result.MsiPath, ".intunewin");
                 var packaged = IntuneWinPackager.PackageMsi(result.MsiPath, intunewin);
                 _model.Append($"built {packaged.Path} ({packaged.EncryptedSize:N0} bytes)");
+                intunewinNote = "  +  .intunewin";
             }
 
             // Comparing against the deployed version is the whole point, so offer
             // it as soon as there is something to compare.
             if (!string.IsNullOrWhiteSpace(_model.PreviousMsi) && File.Exists(_model.PreviousMsi))
             {
-                _model.RunUpgradeCheck(_model.PreviousMsi, result.MsiPath);
+                await _model.RunUpgradeCheckAsync(_model.PreviousMsi, result.MsiPath);
                 _model.Append($"upgrade check: {_model.Verdict}");
             }
 
             Status($"Built {Path.GetFileName(result.MsiPath)}.{signedNote}");
+
+            // The unmistakable part: a green banner naming the file and its size,
+            // the same information the log carries but where it cannot be missed.
+            string detail = $"{result.SizeBytes:N0} bytes   ·   version {result.Version}"
+                            + (signedNote.Length > 0 ? "   ·  " + signedNote.Trim().TrimEnd('.') : "")
+                            + intunewinNote;
+            _model.ShowBuildResult(true, $"{Path.GetFileName(result.MsiPath)} is ready",
+                                   result.MsiPath, detail);
         }
         catch (Exception ex)
         {
             _model.Append($"build failed: {ex.Message}");
             Status("Build failed - see the log.");
+            _model.ShowBuildResult(false, "Build failed", "", ex.Message);
         }
+    }
+
+    /// <summary>
+    /// For every install-time action that runs an installer without naming where
+    /// it should land, asks the user and writes the vendor's directory switch back
+    /// into the arguments. Returns false if the user cancels, which cancels the
+    /// build. The right switch for the path is learned by re-reading the payload
+    /// EXE, so it works whether the action came from a blueprint or from analysis,
+    /// and whatever the installer family is.
+    /// </summary>
+    private Task<bool> EnsureWrappedInstallersHaveALocation() =>
+        ResolveInstallLocations(askEvenWhenAlreadySet: false);
+
+    /// <summary>
+    /// Asks where each wrapped installer should put its files and records the
+    /// answer. With <paramref name="askEvenWhenAlreadySet"/> true - used right after
+    /// a blueprint is loaded - it asks even when the arguments already carry a path,
+    /// because a blueprint's baked-in location is a suggestion, not a decision the
+    /// person made. At build time it is false, so a location already settled is
+    /// left alone. Returns false if the user cancels, which cancels what prompted
+    /// it. The vendor's directory switch is learned by reading the payload EXE, so
+    /// this works whatever the installer family is.
+    /// </summary>
+    private async Task<bool> ResolveInstallLocations(bool askEvenWhenAlreadySet)
+    {
+        foreach (var row in _model.Run.ToList())
+        {
+            var action = row.Model;
+            bool isInstall = action.When is RunWhen.Install or RunWhen.Both;
+            if (!isInstall || string.IsNullOrWhiteSpace(action.ExePath)) continue;
+
+            bool alreadySet = action.UseInstallerDefaultLocation
+                              || InstallerDetective.MentionsInstallDirectory(action.Arguments);
+            if (alreadySet && !askEvenWhenAlreadySet) continue;
+
+            string? source = _model.Files
+                .FirstOrDefault(f => string.Equals(
+                    Path.GetFileName(f.Source), Path.GetFileName(action.ExePath),
+                    StringComparison.OrdinalIgnoreCase))?.Source;
+
+            // A folder can be written when the arguments already carry a directory
+            // switch (a blueprint's own /D=, say) or when the payload is a recognised
+            // installer family whose switch we know. The blueprint's switch counts even
+            // if live detection fails to recognise the EXE.
+            string? template = source is not null && File.Exists(source)
+                ? InstallerDetective.Analyse(source).SilentArgumentsWithDirectory
+                : null;
+            bool hasExistingSwitch = InstallerDetective.MentionsInstallDirectory(action.Arguments);
+            bool canWriteFolder = hasExistingSwitch || template is not null;
+
+            // Only prompt for something that is actually an installer. A blueprint may
+            // carry a plain post-install command with no directory concept at all.
+            if (!canWriteFolder && !hasExistingSwitch) continue;
+
+            string appName = string.IsNullOrWhiteSpace(_model.ProductName) ? "this app" : _model.ProductName;
+
+            // Seed the suggestion from whatever real path is already known - a
+            // blueprint's own choice - falling back to Program Files under the product
+            // name.
+            string suggested = InstallerDetective.ExtractInstallDirectory(action.Arguments)
+                               ?? $@"C:\Program Files\{MsiProject.Sanitize(_model.ProductName)}";
+
+            var dialog = new InstallLocationDialog(appName, suggested)
+            {
+                DirectorySwitchKnown = canWriteFolder,
+            };
+            var choice = await dialog.ShowDialog<InstallLocationChoice?>(this);
+            if (choice is null) return false;
+
+            if (choice.UseInstallerDefault)
+            {
+                // Strip any path a blueprint carried, so "use the default" is true.
+                row.Arguments = InstallerDetective.RemoveInstallDirectory(action.Arguments);
+                action.UseInstallerDefaultLocation = true;
+                _model.Append($"'{action.ExePath}' will install to the installer's own default location.");
+                continue;
+            }
+
+            // A fixed folder is baked straight into the visible arguments as a real,
+            // editable path - reusing the switch already there if there is one, so a
+            // blueprint's other flags and quoting survive; otherwise the switch the
+            // detected installer family uses.
+            string chosenPath = choice.Path!.TrimEnd('\\');
+            row.Arguments = hasExistingSwitch
+                ? InstallerDetective.WithInstallDirectory(action.Arguments, chosenPath)
+                : string.Format(System.Globalization.CultureInfo.InvariantCulture, template!, chosenPath);
+            action.UseInstallerDefaultLocation = false;
+            _model.Append($"install location for '{action.ExePath}' set to {choice.Path}");
+        }
+        return true;
     }
 
     private void OnOpenOutput(object? sender, RoutedEventArgs e)
@@ -548,7 +743,7 @@ public partial class MainWindow : Window
 
     private async void OnOpenProject(object? sender, RoutedEventArgs e)
     {
-        var file = await PickOpen("Open a MsiMaker package or project", BundleType, ProjectType);
+        var file = await PickOpen("Open a blueprint", BundleType, ProjectType);
         if (file is null) return;
         try
         {
@@ -557,7 +752,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Status($"Could not open project: {ex.Message}");
+            Status($"Could not open blueprint: {ex.Message}");
         }
     }
 
@@ -565,7 +760,7 @@ public partial class MainWindow : Window
     {
         var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
-            Title = "Save package",
+            Title = "Save blueprint",
             SuggestedFileName = $"{MsiProject.Sanitize(_model.ProductName)}{ProjectBundle.Extension}",
             DefaultExtension = ProjectBundle.Extension.TrimStart('.'),
             FileTypeChoices = [BundleType, ProjectType],
@@ -577,19 +772,19 @@ public partial class MainWindow : Window
             if (ProjectBundle.IsBundle(path))
             {
                 var info = ProjectBundle.Save(_model.Project, path);
-                Status($"Saved {file.Name} - {info.FileCount:N0} payload file(s) included, "
-                       + $"{info.PackedBytes:N0} bytes. Version this one file.");
+                Status($"Saved {file.Name} - {info.FileCount:N0} file(s) bundled in, including the installer, "
+                       + $"{info.PackedBytes:N0} bytes. This one file rebuilds the package on any machine.");
             }
             else
             {
                 _model.Project.Save(path);
-                Status($"Saved {file.Name}. This references payload files by path; "
-                       + "save as .msimaker to bundle them in.");
+                Status($"Saved {file.Name}. This stores settings only and points at your payload files by path; "
+                       + "save as .msimaker to bundle the installer in so it works on another machine.");
             }
         }
         catch (Exception ex)
         {
-            Status($"Could not save project: {ex.Message}");
+            Status($"Could not save blueprint: {ex.Message}");
         }
     }
 }

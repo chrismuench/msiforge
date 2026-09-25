@@ -15,7 +15,7 @@ $base = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { $env:TEMP }
 $work = Join-Path $base 'msimaker-ci'
 New-Item -ItemType Directory -Force -Path $work | Out-Null
 
-$cli = Join-Path $PWD 'src\MsiMaker.Cli\bin\Release\net10.0\msimaker.exe'
+$cli = Join-Path $PWD 'src\MsiMaker.App\bin\Release\net10.0\MsiMaker.exe'
 if (-not (Test-Path $cli)) { throw "CLI not found at $cli" }
 
 function Invoke-Msi {

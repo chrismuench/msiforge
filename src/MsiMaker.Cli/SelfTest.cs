@@ -45,7 +45,11 @@ public static class SelfTest
             File.WriteAllText(Path.Combine(payloadDir, "sub", "nested.txt"), "nested");
 
             byte[] large = new byte[200_000];
+            // A fixed seed on purpose: the self test must produce the same bytes
+            // every run so a cabinet difference means a real regression.
+#pragma warning disable CA5394
             new Random(1234).NextBytes(large);
+#pragma warning restore CA5394
             File.WriteAllBytes(Path.Combine(payloadDir, "large.bin"), large);
 
             var project = new MsiProject

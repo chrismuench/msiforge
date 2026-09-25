@@ -72,6 +72,16 @@ public sealed class RunAction
     public bool IgnoreExitCode { get; set; }
 
     /// <summary>
+    /// A deliberate choice to let a wrapped installer install to its own default
+    /// location, made when the package was built rather than assumed. Without it,
+    /// an install action whose arguments name no directory is treated as an open
+    /// question - the build asks where to install - so this is what tells the
+    /// difference between "not decided yet" and "decided: the installer's default".
+    /// </summary>
+    public bool UseInstallerDefaultLocation { get; set; }
+
+
+    /// <summary>
     /// Arguments that undo this action if the install fails later on, run against
     /// the same executable. Windows Installer cannot roll back an arbitrary
     /// executable by itself, so without a rollback a failed install leaves
@@ -131,6 +141,28 @@ public sealed class ArpInfo
     public bool NoModify { get; set; } = true;
     public bool NoRepair { get; set; } = true;
     public bool NoRemove { get; set; }
+
+    /// <summary>
+    /// Keep this package out of the Programs list (ARPSYSTEMCOMPONENT).
+    ///
+    /// It is still a fully registered product - Windows Installer tracks it, an
+    /// Intune detection rule finds it by ProductCode, and "msiexec /x {code}"
+    /// removes it - it just does not appear as its own row in Programs and
+    /// Features.
+    ///
+    /// The reason it exists: wrapping a vendor's EXE installer in an MSI means two
+    /// installers run and two things register. The vendor's setup writes its own
+    /// Programs entry, so a visible entry from the wrapper as well is the same app
+    /// listed twice, usually at two different versions - the wrapper's declared
+    /// version and the EXE's real one. Hiding the wrapper leaves the vendor's own
+    /// entry as the single, correct one.
+    ///
+    /// Null means decide: hidden when the package wraps an installer EXE (an
+    /// install-time Run action with an ExePath), visible otherwise, because a
+    /// package that lays its own files down is the only installer there is and
+    /// should be listed.
+    /// </summary>
+    public bool? HideFromProgramsList { get; set; }
 }
 
 /// <summary>Everything beyond the .msi is opt-in.</summary>
@@ -216,12 +248,96 @@ public sealed class MsiProject
     public Guid EffectiveProductCode =>
         ProductCode ?? DeterministicGuid.Create(UpgradeCode, "ProductCode/" + ComparableVersion);
 
+    /// <summary>
+    /// Characters Windows forbids in a file or folder name. Spelled out rather
+    /// than taken from Path.GetInvalidFileNameChars(), because that returns the
+    /// *host's* rules: on macOS and Linux it is only '/' and NUL. The target is
+    /// always Windows regardless of where the build runs, so a project built on a
+    /// Mac has to sanitise to the same name it would on Windows - otherwise the
+    /// two installs land in different directories.
+    ///
+    /// ':' and '|' matter beyond tidiness here: the Directory table's DefaultDir
+    /// column uses "target:source" and "short|long" syntax, so an unsanitised one
+    /// silently changes which directory the package installs into.
+    /// </summary>
+    private const string InvalidNameChars = "<>:\"/\\|?*";
+
+    /// <summary>
+    /// Rejects values that would change the meaning of a command line the package
+    /// runs as SYSTEM.
+    ///
+    /// Task names and process names are interpolated into schtasks and taskkill
+    /// command lines inside double quotes. Windows Installer starts these with
+    /// CreateProcess rather than a shell, so there is no way to append a second
+    /// command - but there is every way to append further *arguments*, and
+    /// schtasks takes some consequential ones. A task named "*" produces
+    /// schtasks /Delete /TN "*" /F, which is the documented delete-every-task
+    /// wildcard, running as SYSTEM on uninstall and on rollback with its exit
+    /// code ignored. A name ending in a backslash escapes its own closing quote.
+    ///
+    /// Task Scheduler forbids these characters anyway, so nothing legitimate is
+    /// turned away.
+    /// </summary>
+    private static IEnumerable<string> CommandSafety(string what, string value)
+    {
+        const string forbidden = "\"*?<>|";
+
+        foreach (char c in value)
+        {
+            if (forbidden.Contains(c))
+                yield return $"{what} contains '{c}', which is not allowed: the value is placed on a "
+                             + "command line the package runs as SYSTEM, where it would be read as an "
+                             + "argument rather than as text.";
+            else if (c < ' ')
+                yield return $"{what} contains a control character, which is not allowed.";
+        }
+
+        if (value.EndsWith('\\'))
+            yield return $"{what} ends with a backslash, which would escape the quote that closes it "
+                         + "on the command line and swallow the argument after it.";
+    }
+
+    /// <summary>
+    /// Lock the install folder down to SYSTEM, Administrators and read-only for
+    /// everyone else, with inheritance broken.
+    ///
+    /// Null means decide, which locks it whenever the install root is one a
+    /// standard user can write to. %ProgramFiles% already grants Users no more
+    /// than read and execute, so a package installed there needs nothing; the
+    /// default ACL on C:\ProgramData is a different matter, and it is inherited
+    /// by every folder created underneath it.
+    ///
+    /// Set it true to lock a Program Files install as well, or false to keep the
+    /// inherited permissions - which is the right answer for a package whose
+    /// whole purpose is a folder its users write to.
+    /// </summary>
+    public bool? LockInstallFolder { get; set; }
+
+    /// <summary>
+    /// True when the install root hands out write access to ordinary users, so
+    /// anything the package runs from there is only as trustworthy as the least
+    /// privileged account on the machine.
+    /// </summary>
+    public bool RootIsUserWritable => Root is InstallRoot.CommonAppData;
+
+    public bool ShouldLockInstallFolder => LockInstallFolder ?? RootIsUserWritable;
+
+    /// <summary>
+    /// Everything this package accepts on the msiexec command line, and what each
+    /// one does. Emitted as Property rows carrying the defaults, listed in the
+    /// HELP dialog, and added to SecureCustomProperties.
+    /// </summary>
+    public List<MsiParameter> Parameters { get; set; } = [];
+
     public static string Sanitize(string name)
     {
         var sb = new StringBuilder();
         foreach (char c in name)
-            if (!Path.GetInvalidFileNameChars().Contains(c)) sb.Append(c);
-        string s = sb.ToString().Trim();
+            if (c >= ' ' && !InvalidNameChars.Contains(c)) sb.Append(c);
+
+        // Windows silently drops a trailing dot or space from a directory name,
+        // which would leave the package referring to a name that cannot exist.
+        string s = sb.ToString().Trim().TrimEnd('.', ' ');
         return s.Length == 0 ? "Product" : s;
     }
 
@@ -335,10 +451,39 @@ public sealed class MsiProject
         foreach (var t in Tasks)
         {
             if (string.IsNullOrWhiteSpace(t.Name)) errors.Add("A scheduled task needs a name.");
+            errors.AddRange(CommandSafety($"Scheduled task name '{t.Name}'", t.Name));
+            if (!string.IsNullOrWhiteSpace(t.Folder))
+                errors.AddRange(CommandSafety($"Scheduled task folder '{t.Folder}'", t.Folder!));
+
             string target = t.ExePath.Replace('\\', '/').TrimStart('/');
             if (!Files.Any(f => string.Equals(f.EffectiveTarget, target, StringComparison.OrdinalIgnoreCase)))
                 errors.Add($"Scheduled task '{t.Name}' runs '{t.ExePath}', which is not in the payload.");
         }
+
+        var parameterNames = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var parameter in Parameters)
+        {
+            // Windows Installer will only accept a property from the command line
+            // if its name is all upper case - a lower-case letter anywhere makes it
+            // private, and msiexec ignores the assignment without a word. The whole
+            // point of a parameter is that it can be set, so this is an error.
+            if (!MsiParameter.IsPublicName(parameter.Name))
+                errors.Add($"Parameter '{parameter.Name}' is not a valid public property name. "
+                           + "It must start with a letter and contain only A-Z, 0-9 and underscore, "
+                           + "in upper case; Windows Installer silently ignores any other name given "
+                           + "on the command line.");
+
+            if (!parameterNames.Add(parameter.Name))
+                errors.Add($"Parameter '{parameter.Name}' is declared more than once.");
+
+            if (MsiParameter.Reserved.Contains(parameter.Name))
+                errors.Add($"Parameter '{parameter.Name}' is a name Windows Installer reserves; "
+                           + "choose another.");
+        }
+
+        foreach (string image in CloseProcesses)
+            if (!string.IsNullOrWhiteSpace(image))
+                errors.AddRange(CommandSafety($"CloseProcesses entry '{image}'", image));
 
         foreach (var r in Run)
         {
@@ -378,7 +523,12 @@ public static class DeterministicGuid
         nsBytes.CopyTo(buffer);
         nameBytes.CopyTo(buffer, 16);
 
+        // RFC 4122 defines a version 5 UUID as SHA-1 over the namespace and name.
+        // This derives a stable ProductCode from the product identity; it is not a
+        // security boundary and no other algorithm yields a conformant v5 UUID.
+#pragma warning disable CA5350
         byte[] hash = SHA1.HashData(buffer);
+#pragma warning restore CA5350
         Span<byte> result = stackalloc byte[16];
         hash.AsSpan(0, 16).CopyTo(result);
 
@@ -398,5 +548,45 @@ public static class DeterministicGuid
         (g[1], g[2]) = (g[2], g[1]);
         (g[4], g[5]) = (g[5], g[4]);
         (g[6], g[7]) = (g[7], g[6]);
+    }
+}
+
+/// <summary>
+/// One value an administrator can set when they install the package:
+///
+///     msiexec /i app.msi INSTALLARGS="/quiet /norestart"
+///
+/// A package that bakes every decision in at build time has to be rebuilt for
+/// every variation of it. Declaring the value here instead gives it a default,
+/// a description that shows up in the HELP dialog, and a place in
+/// SecureCustomProperties so it survives an elevated install.
+/// </summary>
+public sealed class MsiParameter
+{
+    /// <summary>
+    /// The property name, as typed on the command line. Upper case, because
+    /// Windows Installer ignores command-line assignments to anything else.
+    /// </summary>
+    public required string Name { get; set; }
+
+    /// <summary>Used when the administrator does not supply one.</summary>
+    public string? Default { get; set; }
+
+    /// <summary>Shown in the HELP dialog. Say what it changes, not what it is.</summary>
+    public string? Description { get; set; }
+
+    /// <summary>Names Windows Installer gives its own meaning to.</summary>
+    public static readonly HashSet<string> Reserved = new(StringComparer.Ordinal)
+    {
+        "ALLUSERS", "REBOOT", "REINSTALL", "REINSTALLMODE", "REMOVE", "PRODUCTCODE",
+        "UPGRADECODE", "PRODUCTVERSION", "TARGETDIR", "ACTION", "HELP",
+    };
+
+    public static bool IsPublicName(string? name)
+    {
+        if (string.IsNullOrEmpty(name) || !char.IsAsciiLetterUpper(name[0])) return false;
+        foreach (char c in name)
+            if (!char.IsAsciiLetterUpper(c) && !char.IsAsciiDigit(c) && c != '_') return false;
+        return true;
     }
 }

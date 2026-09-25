@@ -67,7 +67,7 @@ public sealed class PayloadAnalysis
 /// switches that make it run silently. Silent switches are not guesswork: every
 /// framework leaves an identifiable fingerprint in the binary.
 /// </summary>
-public static class InstallerDetective
+public static partial class InstallerDetective
 {
     private sealed record Signature(
         InstallerKind Kind,
@@ -265,6 +265,13 @@ public static class InstallerDetective
 
         string fileName = Path.GetFileName(analysis.Path);
         project.Files.Add(new PayloadFile { SourcePath = analysis.Path });
+
+        // Just the silent switch, with no install directory invented. Where a
+        // wrapped installer lands is a real decision - a specific folder, or the
+        // vendor's own default - and picking one here would be guessing at it. The
+        // choice is put to whoever builds the package, not assumed; the detective's
+        // job is only to record that the installer can take a directory switch, so
+        // that prompt knows the switch to write.
         project.Run.Add(new RunAction
         {
             Id = "payload",
@@ -273,6 +280,79 @@ public static class InstallerDetective
             When = RunWhen.Install,
         });
         return project;
+    }
+
+    /// <summary>
+    /// Whether a wrapped installer's arguments already name where to install. The
+    /// tokens are the directory switches of the installer kinds recognised above,
+    /// plus [INSTALLFOLDER] for anyone wiring the MSI's own folder in by hand.
+    /// Deliberately broad: a false positive only skips a prompt or a warning, while
+    /// a false negative nags a package that is already correct.
+    /// </summary>
+    public static bool MentionsInstallDirectory(string? arguments)
+    {
+        if (string.IsNullOrWhiteSpace(arguments)) return false;
+        string[] hints = ["/d=", "/dir", "installdir", "appdir", "targetdir", "-o", "[installfolder]"];
+        return hints.Any(h => arguments.Contains(h, StringComparison.OrdinalIgnoreCase));
+    }
+
+    // Value-bearing directory switches, quoted or bare, with the switch itself and
+    // its value captured. /D= is handled separately everywhere below because NSIS
+    // defines it to swallow the rest of the command line, unquoted.
+    [System.Text.RegularExpressions.GeneratedRegex(
+        @"(/DIR=|INSTALLDIR=|APPDIR=|TARGETDIR=|-o)(""[^""]*""|\S+)",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
+    private static partial System.Text.RegularExpressions.Regex DirectorySwitch();
+
+    /// <summary>
+    /// The install path already named in a set of arguments, or null. Used to seed
+    /// the location prompt from a blueprint's own value, so the blueprint's path is a
+    /// suggestion the user confirms rather than a decision made for them.
+    /// </summary>
+    public static string? ExtractInstallDirectory(string? arguments)
+    {
+        if (string.IsNullOrWhiteSpace(arguments)) return null;
+
+        int d = arguments.IndexOf("/D=", StringComparison.OrdinalIgnoreCase);
+        if (d >= 0) return arguments[(d + 3)..].Trim().Trim('"');
+
+        var m = DirectorySwitch().Match(arguments);
+        return m.Success ? m.Groups[2].Value.Trim().Trim('"') : null;
+    }
+
+    /// <summary>
+    /// The arguments with the install directory changed to <paramref name="path"/>,
+    /// reusing whatever switch is already there so a blueprint's other arguments and
+    /// its quoting style survive. Returns the arguments unchanged if none is found.
+    /// </summary>
+    public static string WithInstallDirectory(string? arguments, string path)
+    {
+        arguments ??= "";
+
+        int d = arguments.IndexOf("/D=", StringComparison.OrdinalIgnoreCase);
+        if (d >= 0) return arguments[..(d + 3)] + path;   // NSIS: /D= runs to end of line, unquoted
+
+        var m = DirectorySwitch().Match(arguments);
+        if (!m.Success) return arguments;
+
+        string replacement = $"{m.Groups[1].Value}\"{path}\"";
+        return arguments[..m.Groups[1].Index] + replacement + arguments[(m.Groups[2].Index + m.Groups[2].Length)..];
+    }
+
+    /// <summary>
+    /// The arguments with any install-directory switch removed, for when the choice
+    /// is to let the installer use its own default. A blueprint's baked-in path is
+    /// otherwise still there and still obeyed, which would make the "default" choice
+    /// a lie.
+    /// </summary>
+    public static string RemoveInstallDirectory(string? arguments)
+    {
+        if (string.IsNullOrWhiteSpace(arguments)) return "";
+
+        int d = arguments.IndexOf("/D=", StringComparison.OrdinalIgnoreCase);
+        if (d >= 0) return arguments[..d].Trim();
+
+        return DirectorySwitch().Replace(arguments, "").Replace("  ", " ").Trim();
     }
 
     /// <summary>

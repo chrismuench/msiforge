@@ -1,7 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <AssemblyName>msimaker</AssemblyName>
+    <!-- A library, not an executable. The commands are reached through the single
+         MsiMaker binary, which is both the window and the command line, so there
+         is one thing to download and no way to run a stale copy of half of it. -->
+    <OutputType>Library</OutputType>
+    <AssemblyName>MsiMaker.Cli</AssemblyName>
     <RootNamespace>MsiMaker.Cli</RootNamespace>
   </PropertyGroup>
   <ItemGroup><ProjectReference Include="../MsiMaker.Core/MsiMaker.Core.csproj" /></ItemGroup>

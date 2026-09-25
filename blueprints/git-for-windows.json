@@ -3,6 +3,7 @@
   "Name": "Git for Windows",
   "Vendor": "Git for Windows project",
   "Description": "The Inno Setup installer, wrapped and silenced, with a pointer at the inf file that is the only sane way to pin its options.",
+  "Category": "Applications",
   "Awkwardness": "Silencing Git is easy; deciding what it installs is not. The choices that matter later - which SSH client, which credential helper, which line-ending conversion, whether Git Bash is added to the terminal list - are not command-line switches at all. Left alone the installer takes its own defaults, and those defaults have changed between releases, so two machines imaged a year apart end up with different line-ending behaviour and nobody connects that to the packaging. The supported way to pin them is an answer file: run the installer once with /SAVEINF, then ship that file and pass /LOADINF. Git also upgrades itself in place from its own installer, so the version in Programs and Features can march ahead of the version the MSI wrapper believes it installed.",
   "DownloadUrl": "https://git-scm.com/download/win",
   "SetupFileHint": "Git-X.Y.Z-64-bit.exe",
@@ -23,7 +24,10 @@
     "Platform": "X64",
     "InstallFolder": "Git Wrapper",
     "Files": [
-      { "SourcePath": "{payload}", "TargetPath": "setup.exe" }
+      {
+        "SourcePath": "{payload}",
+        "TargetPath": "setup.exe"
+      }
     ],
     "Run": [
       {
@@ -33,7 +37,9 @@
         "When": "Install"
       }
     ],
-    "CloseProcesses": ["git-bash.exe"],
+    "CloseProcesses": [
+      "git-bash.exe"
+    ],
     "Arp": {
       "AboutUrl": "https://git-scm.com/",
       "Comments": "Git for Windows wrapped as an MSI. Silent switches from vendor documentation, untested."

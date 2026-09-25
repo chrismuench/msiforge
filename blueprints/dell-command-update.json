@@ -3,6 +3,7 @@
   "Name": "Dell Command | Update",
   "Vendor": "Dell Technologies",
   "Description": "Dell's driver, firmware and BIOS update client, wrapped so the deployment itself has a version Intune can compare.",
+  "Category": "Device & driver tools",
   "Awkwardness": "Installing Dell Command | Update is not the same as updating anything. The work is done afterwards by dcu-cli.exe on a schedule, so a fleet can be one hundred per cent compliant on this application and still be a year behind on firmware. The installer also has a habit of removing what it considers conflicting Dell software (Dell Update, Dell SupportAssist for PCs are the usual casualties), which is the correct behaviour and still a surprise if nobody was told. Dell ships the application in two flavours - the classic Win32 build and the Universal Windows Platform build - which land in different folders and carry different uninstall strings, so a detection or uninstall rule written against one silently does nothing on the other.",
   "DownloadUrl": "https://www.dell.com/support/kbdoc/en-uk/000177325/dell-command-update",
   "DownloadNotes": "Dell's download page requires you to pick a flavour. Note which one you took - Universal Windows Platform or classic - because the install path and uninstall string differ.",
@@ -24,7 +25,10 @@
     "ManufacturerFolder": "Dell",
     "InstallFolder": "Command Update Wrapper",
     "Files": [
-      { "SourcePath": "{payload}", "TargetPath": "setup.exe" }
+      {
+        "SourcePath": "{payload}",
+        "TargetPath": "setup.exe"
+      }
     ],
     "Run": [
       {

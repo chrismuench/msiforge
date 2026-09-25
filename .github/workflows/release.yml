@@ -1,0 +1,99 @@
+# Builds the thing people actually download: one self-contained executable per
+# platform, no .NET runtime to install first.
+#
+# Triggered by a version tag, and runnable by hand so a release can be rehearsed
+# without tagging anything.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, rid: win-x64,   asset: MsiMaker-windows-x64.exe }
+          - { os: windows-latest, rid: win-arm64, asset: MsiMaker-windows-arm64.exe }
+          - { os: macos-latest,   rid: osx-arm64, asset: MsiMaker-macos-arm64 }
+          - { os: macos-latest,   rid: osx-x64,   asset: MsiMaker-macos-x64 }
+          - { os: ubuntu-latest,  rid: linux-x64, asset: MsiMaker-linux-x64 }
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # The tests gate the release. A package that builds but does not install is
+      # exactly the failure this project exists to prevent, so shipping one
+      # untested would be the wrong kind of irony.
+      - name: Test
+        run: dotnet test tests/MsiMaker.Tests/MsiMaker.Tests.csproj -c Release
+
+      - name: Publish
+        run: >
+          dotnet publish src/MsiMaker.App/MsiMaker.App.csproj
+          -c Release -r ${{ matrix.rid }} --self-contained true -o out
+
+      # Proves the published binary runs on a clean runner with no .NET installed
+      # beyond the SDK - and that its CLI half is wired up, which a GUI-only smoke
+      # test would not catch.
+      - name: Smoke test the published binary
+        shell: bash
+        run: |
+          exe=out/MsiMaker
+          [ -f "$exe.exe" ] && exe="$exe.exe"
+          chmod +x "$exe" 2>/dev/null || true
+          "$exe" doctor
+          "$exe" selftest
+
+      - name: Name the asset
+        shell: bash
+        run: |
+          src=out/MsiMaker
+          [ -f "$src.exe" ] && src="$src.exe"
+          mv "$src" "${{ matrix.asset }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: ${{ matrix.asset }}
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: assets, merge-multiple: true }
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: assets/*
+          generate_release_notes: true
+          body: |
+            One file per platform. Download it and run it - there is no installer
+            and no .NET runtime to install first.
+
+            The same binary is both the desktop app and the command line: run it
+            with no arguments for the window, or with a command for the CLI.
+
+                MsiMaker-windows-x64.exe build myapp.msimaker
+                MsiMaker-windows-x64.exe doctor
+
+            **macOS**: the binary is not notarised, so Gatekeeper will refuse it
+            on first run. Clear the quarantine flag once:
+
+                xattr -d com.apple.quarantine ./MsiMaker-macos-arm64
+                chmod +x ./MsiMaker-macos-arm64
+
+            **Linux**: `chmod +x` before running.

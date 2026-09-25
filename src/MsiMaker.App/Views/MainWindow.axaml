@@ -5,7 +5,7 @@
         x:DataType="vm:MainViewModel"
         Background="{DynamicResource AppSurfaceBrush}"
         WindowStartupLocation="CenterScreen"
-        Title="MsiMaker" Width="980" Height="620" MinWidth="760" MinHeight="480">
+        Title="MsiMaker" Width="980" Height="720" MinWidth="760" MinHeight="480">
 
   <DockPanel>
 
@@ -44,13 +44,13 @@
           <Button Name="OpenProjectButton" Classes="quiet">
             <StackPanel Orientation="Horizontal" Spacing="7">
               <Path Classes="icon" Data="{StaticResource IconFolder}" />
-              <TextBlock Text="Open project…" VerticalAlignment="Center" />
+              <TextBlock Text="Open blueprint…" VerticalAlignment="Center" />
             </StackPanel>
           </Button>
           <Button Name="SaveProjectButton">
             <StackPanel Orientation="Horizontal" Spacing="7">
               <Path Classes="icon" Data="{StaticResource IconSave}" />
-              <TextBlock Text="Save project…" VerticalAlignment="Center" />
+              <TextBlock Text="Save blueprint…" VerticalAlignment="Center" />
             </StackPanel>
           </Button>
         </StackPanel>
@@ -114,7 +114,7 @@
             Background="{DynamicResource ChromeBrush}"
             BorderBrush="{DynamicResource BorderSubtleBrush}"
             BorderThickness="0,1,0,0"
-            Padding="20,9">
+            Padding="24,15">
       <Grid ColumnDefinitions="Auto,*,Auto">
 
         <Button Grid.Column="0" Name="WizardBackButton" Classes="quiet"
@@ -191,68 +191,90 @@
               <TextBlock Classes="h1" Text="Start here" Margin="0" VerticalAlignment="Center" />
             </StackPanel>
 
-            <TextBlock Classes="sub" Margin="0,10,0,14"
-                       Text="A recipe is the best start when one fits: a working project for an application that does not package the obvious way, plus the reason it does not. Pick one below, hand it the payload you downloaded, and you get a starting project instead of an afternoon in vendor documentation." />
+            <TextBlock Classes="sub" Margin="0,8,0,10"
+                       Text="A preloaded blueprint is the fastest start when one fits: a working setup for an app that resists normal packaging, plus the reason why. Pick one below, hand it the file you downloaded, and you get a ready-to-edit blueprint." />
 
             <!--
-              The other two routes sit on one quiet line rather than as buttons
-              of equal weight: the recipe list below is the recommendation, and
-              three equal buttons would say the three are interchangeable.
+              The list is the recommendation, but it is not the only way in, and
+              an admin packaging something not in it must not feel stuck. So the
+              two other routes are spelled out as real buttons, led by a line that
+              says plainly the list is optional.
             -->
-            <Border Classes="inner" Margin="0,0,0,16">
+            <Border Classes="inner" Margin="0,0,0,14">
               <StackPanel Orientation="Horizontal" Spacing="10">
                 <TextBlock Classes="hint" Margin="0" VerticalAlignment="Center"
-                           Text="Already have one of your own, or packaging something not in the library?" />
-                <Button Name="OpenProjectOnLibraryButton">
+                           Text="Not in the list? You don't have to pick one —" />
+                <Button Name="StartBlankButton">
                   <StackPanel Orientation="Horizontal" Spacing="7">
-                    <Path Classes="icon" Data="{StaticResource IconFolder}" />
-                    <TextBlock Text="Open project…" VerticalAlignment="Center" />
+                    <Path Classes="icon" Data="{StaticResource IconPlus}" />
+                    <TextBlock Text="Start blank" VerticalAlignment="Center" />
                   </StackPanel>
                 </Button>
-                <Button Name="StartBlankButton" Content="Start blank" Classes="quiet" />
+                <TextBlock Classes="hint" Margin="0" VerticalAlignment="Center" Text="or" />
+                <Button Name="OpenProjectOnLibraryButton" Classes="quiet">
+                  <StackPanel Orientation="Horizontal" Spacing="7">
+                    <Path Classes="icon" Data="{StaticResource IconFolder}" />
+                    <TextBlock Text="Open blueprint…" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Button>
               </StackPanel>
             </Border>
           </StackPanel>
 
-          <!-- ================================================= recipe list -->
+          <!-- ================================================= blueprint list -->
           <Border Grid.Row="1" Grid.Column="0" Classes="card" Margin="0" Padding="0">
             <DockPanel>
-              <TextBlock DockPanel.Dock="Top" Classes="eyebrow" Text="RECIPES"
+              <TextBlock DockPanel.Dock="Top" Classes="eyebrow" Text="PRELOADED BLUEPRINTS"
                          Margin="16,14,16,6" />
 
               <!--
                 The library's own location: findable, but folded away by
                 default. Expanded it is half the height of this card, and the
-                list of recipes is what the card is for.
+                list of blueprints is what the card is for.
               -->
               <Border DockPanel.Dock="Bottom" Classes="inner"
                       CornerRadius="0,0,9,9" BorderThickness="0,1,0,0" Padding="10,2">
-                <Expander Header="Your own recipes" IsExpanded="False"
+                <Expander Header="Your own blueprints" IsExpanded="False"
                           HorizontalAlignment="Stretch" Background="Transparent"
                           BorderThickness="0" Padding="0">
                   <StackPanel Spacing="2" Margin="0,0,0,8">
-                    <SelectableTextBlock Text="{Binding RecipeUserDirectory}"
+                    <SelectableTextBlock Text="{Binding BlueprintUserDirectory}"
                                          FontFamily="{DynamicResource MonoFont}" FontSize="11"
                                          TextWrapping="Wrap"
                                          Foreground="{DynamicResource TextSecondaryBrush}" />
                     <TextBlock Classes="hint" Margin="0,4,0,0"
-                               Text="Drop recipe JSON in that folder and it is read on the next start, or point MSIMAKER_RECIPES at a folder your team shares. A file that reuses a built-in id replaces the built-in one, so a vendor who changes a switch can be corrected today rather than in the next release." />
-                    <TextBlock Classes="hint" IsVisible="{Binding HasRecipeProblems}"
+                               Text="Drop blueprint JSON in that folder and it is read on the next start, or point MSIMAKER_BLUEPRINTS at a folder your team shares. A file that reuses a built-in id replaces the built-in one, so a vendor who changes a switch can be corrected today rather than in the next release." />
+                    <TextBlock Classes="hint" IsVisible="{Binding HasBlueprintProblems}"
                                Foreground="{DynamicResource FailTextBrush}"
-                               Text="{Binding RecipeProblems}" />
-                    <Button Name="OpenRecipesFolderButton" Content="Show recipes folder"
+                               Text="{Binding BlueprintProblems}" />
+                    <Button Name="OpenBlueprintsFolderButton" Content="Show blueprints folder"
                             Classes="quiet" Margin="0,8,0,0" HorizontalAlignment="Left" />
                   </StackPanel>
                 </Expander>
               </Border>
 
-              <ListBox Classes="recipes" ItemsSource="{Binding Recipes}"
-                       SelectedItem="{Binding SelectedRecipe}"
+              <!--
+                A persistent scrollbar, not the thin auto-hiding overlay: when the
+                library is taller than the card, the bar is the only cue that there
+                is more below the fold, so it has to stay visible.
+              -->
+              <ListBox Classes="blueprints" ItemsSource="{Binding Blueprints}"
+                       SelectedItem="{Binding SelectedBlueprint}"
+                       ScrollViewer.AllowAutoHide="False"
+                       ScrollViewer.VerticalScrollBarVisibility="Auto"
                        Background="Transparent" BorderThickness="0" Padding="7,0,7,8">
                 <ListBox.ItemTemplate>
-                  <DataTemplate x:DataType="vm:RecipeRow">
-                    <Grid ColumnDefinitions="*,Auto">
-                      <StackPanel Grid.Column="0" Spacing="1" VerticalAlignment="Center">
+                  <DataTemplate x:DataType="vm:BlueprintRow">
+                    <StackPanel Spacing="0">
+                      <!--
+                        A category header on the first row of each group. The list
+                        is ordered by category, so this shows once per group and
+                        turns a flat list into "Applications" and "Device & driver
+                        tools" sections.
+                      -->
+                      <TextBlock Text="{Binding GroupLabel}" Classes="grouphead"
+                                 IsVisible="{Binding IsGroupStart}" />
+                      <StackPanel Spacing="1" VerticalAlignment="Center">
                         <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold"
                                    Foreground="{DynamicResource TextPrimaryBrush}"
                                    TextTrimming="CharacterEllipsis" />
@@ -260,29 +282,15 @@
                                    Foreground="{DynamicResource TextMutedBrush}"
                                    TextTrimming="CharacterEllipsis" />
                       </StackPanel>
-                      <!--
-                        The badge rides in the list itself, not only in the
-                        detail pane: the choice is made here, so this is where
-                        tested and merely transcribed have to be told apart.
-                      -->
-                      <Border Grid.Column="1" Classes="pill"
-                              Classes.pass="{Binding IsVerified}"
-                              Classes.warn="{Binding IsUntested}"
-                              Margin="8,0,0,0">
-                        <TextBlock Classes="pilltext"
-                                   Classes.pass="{Binding IsVerified}"
-                                   Classes.warn="{Binding IsUntested}"
-                                   Text="{Binding Badge}" />
-                      </Border>
-                    </Grid>
+                    </StackPanel>
                   </DataTemplate>
                 </ListBox.ItemTemplate>
               </ListBox>
             </DockPanel>
           </Border>
 
-          <!-- =============================================== recipe detail -->
-          <DockPanel Grid.Row="1" Grid.Column="2" IsVisible="{Binding HasSelectedRecipe}">
+          <!-- =============================================== blueprint detail -->
+          <DockPanel Grid.Row="1" Grid.Column="2" IsVisible="{Binding HasSelectedBlueprint}">
 
             <!--
               Pinned rather than scrolled away with the prose. The awkwardness
@@ -291,20 +299,20 @@
             -->
             <Border DockPanel.Dock="Bottom" Classes="card" Margin="0,12,0,0" Padding="14,12">
               <StackPanel Orientation="Horizontal" Spacing="12">
-                <Button Name="UseRecipeButton" Classes="primary">
+                <Button Name="UseBlueprintButton" Classes="primary">
                   <StackPanel Orientation="Horizontal" Spacing="8">
                     <Path Classes="icon" Data="{StaticResource IconArrowRight}" />
-                    <TextBlock Text="{Binding SelectedRecipe.UseLabel}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding SelectedBlueprint.UseLabel}" VerticalAlignment="Center" />
                   </StackPanel>
                 </Button>
                 <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
                   <TextBlock Classes="hint" Margin="0" VerticalAlignment="Center"
-                             Text="Replaces the current project" />
+                             Text="Replaces the current blueprint" />
                   <Button Classes="info">
                     <Button.Flyout>
                       <Flyout>
                         <TextBlock Classes="disclosure"
-                                   Text="This replaces the current project. The template carries a realistic version, which is not necessarily the version you downloaded - set the Version on the Identity tab to the one you actually have, because the ProductCode Intune detects on is derived from it." />
+                                   Text="This replaces the current blueprint. The template carries a realistic version, which is not necessarily the version you downloaded - set the Version on the Identity tab to the one you actually have, because the ProductCode Intune detects on is derived from it." />
                       </Flyout>
                     </Button.Flyout>
                   </Button>
@@ -319,44 +327,20 @@
                 <StackPanel Spacing="16">
 
                   <StackPanel Spacing="3">
-                    <TextBlock Text="{Binding SelectedRecipe.Name}" FontSize="17" FontWeight="SemiBold"
+                    <TextBlock Text="{Binding SelectedBlueprint.Name}" FontSize="17" FontWeight="SemiBold"
                                Foreground="{DynamicResource TextPrimaryBrush}" TextWrapping="Wrap" />
                     <TextBlock Classes="hint" Margin="0"
-                               Text="{Binding SelectedRecipe.Vendor}" />
+                               Text="{Binding SelectedBlueprint.Vendor}" />
                   </StackPanel>
-
-                  <!-- Verified or untested, stated in full, above everything else. -->
-                  <Border Classes="verdict pass"
-                          IsVisible="{Binding SelectedRecipe.IsVerified}">
-                    <Grid ColumnDefinitions="Auto,*">
-                      <Path Grid.Column="0" Classes="icon" Data="{StaticResource IconCheckCircle}"
-                            Margin="0,1,11,0" />
-                      <TextBlock Grid.Column="1" Classes="verdicttext pass"
-                                 Text="VERIFIED - this package was built, installed, upgraded and uninstalled from this repository." />
-                    </Grid>
-                  </Border>
-                  <Border Classes="verdict warn"
-                          IsVisible="{Binding SelectedRecipe.IsUntested}">
-                    <Grid ColumnDefinitions="Auto,*">
-                      <Path Grid.Column="0" Classes="icon" Data="{StaticResource IconAlert}"
-                            Margin="0,1,11,0" />
-                      <StackPanel Grid.Column="1" Spacing="5">
-                        <TextBlock Classes="verdicttext warn"
-                                   Text="UNTESTED - nobody has run this one." />
-                        <TextBlock Classes="verdicttext warn" FontWeight="Normal" FontSize="12.5"
-                                   Text="The switches came from vendor documentation and were never built, installed or uninstalled here. Vendor documentation is usually right and occasionally a release out of date, and a wrong silent switch fails quietly across a whole fleet. Install it on one device and uninstall it again before this goes anywhere near a deployment ring." />
-                      </StackPanel>
-                    </Grid>
-                  </Border>
 
                   <StackPanel Spacing="6">
                     <TextBlock Classes="eyebrow" Text="WHY THIS ONE IS AWKWARD" Margin="0" />
-                    <TextBlock Classes="prose" Text="{Binding SelectedRecipe.Awkwardness}" />
+                    <TextBlock Classes="prose" Text="{Binding SelectedBlueprint.Awkwardness}" />
                   </StackPanel>
 
                   <StackPanel Spacing="6">
                     <TextBlock Classes="eyebrow" Text="WHAT IT BUILDS" Margin="0" />
-                    <TextBlock Classes="prose" Text="{Binding SelectedRecipe.Description}" />
+                    <TextBlock Classes="prose" Text="{Binding SelectedBlueprint.Description}" />
                   </StackPanel>
 
                 </StackPanel>
@@ -366,20 +350,20 @@
                 <StackPanel Spacing="16">
                   <TextBlock Classes="eyebrow" Text="WHERE THE PAYLOAD COMES FROM" Margin="0" />
 
-                  <StackPanel Spacing="4" IsVisible="{Binding SelectedRecipe.HasDownloadUrl}">
+                  <StackPanel Spacing="4" IsVisible="{Binding SelectedBlueprint.HasDownloadUrl}">
                     <TextBlock Classes="label" Text="Download" Margin="0" />
                     <!--
                       Selectable rather than a hyperlink, so the address is
                       always readable and copyable; the button is the only thing
                       that hands anything to the shell, and only http or https.
                     -->
-                    <SelectableTextBlock Text="{Binding SelectedRecipe.DownloadUrl}"
+                    <SelectableTextBlock Text="{Binding SelectedBlueprint.DownloadUrl}"
                                          FontFamily="{DynamicResource MonoFont}" FontSize="11.5"
                                          TextWrapping="Wrap"
                                          Foreground="{DynamicResource TextSecondaryBrush}" />
-                    <Button Name="OpenRecipeUrlButton" Classes="quiet"
+                    <Button Name="OpenBlueprintUrlButton" Classes="quiet"
                             HorizontalAlignment="Left" Margin="0,4,0,0"
-                            IsEnabled="{Binding SelectedRecipe.CanOpenDownloadUrl}">
+                            IsEnabled="{Binding SelectedBlueprint.CanOpenDownloadUrl}">
                       <StackPanel Orientation="Horizontal" Spacing="7">
                         <Path Classes="icon" Data="{StaticResource IconExternal}" />
                         <TextBlock Text="Open in browser" VerticalAlignment="Center" />
@@ -387,22 +371,22 @@
                     </Button>
                   </StackPanel>
 
-                  <StackPanel Spacing="4" IsVisible="{Binding SelectedRecipe.HasDownloadNotes}">
+                  <StackPanel Spacing="4" IsVisible="{Binding SelectedBlueprint.HasDownloadNotes}">
                     <TextBlock Classes="label" Text="Getting hold of it" Margin="0" />
-                    <TextBlock Classes="prose" Text="{Binding SelectedRecipe.DownloadNotes}" />
+                    <TextBlock Classes="prose" Text="{Binding SelectedBlueprint.DownloadNotes}" />
                   </StackPanel>
 
-                  <StackPanel Spacing="4" IsVisible="{Binding SelectedRecipe.HasSetupFileHint}">
+                  <StackPanel Spacing="4" IsVisible="{Binding SelectedBlueprint.HasSetupFileHint}">
                     <TextBlock Classes="label" Text="What the payload should look like" Margin="0" />
-                    <TextBlock Classes="prose" Text="{Binding SelectedRecipe.SetupFileHint}" />
+                    <TextBlock Classes="prose" Text="{Binding SelectedBlueprint.SetupFileHint}" />
                   </StackPanel>
                 </StackPanel>
               </Border>
 
-              <Border Classes="card" IsVisible="{Binding SelectedRecipe.HasNotes}">
+              <Border Classes="card" IsVisible="{Binding SelectedBlueprint.HasNotes}">
                 <StackPanel Spacing="10">
                   <TextBlock Classes="eyebrow" Text="NOTES" Margin="0" />
-                  <ItemsControl ItemsSource="{Binding SelectedRecipe.Notes}">
+                  <ItemsControl ItemsSource="{Binding SelectedBlueprint.Notes}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="x:String">
                         <Grid ColumnDefinitions="Auto,*" Margin="0,0,0,7">
@@ -415,7 +399,7 @@
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
-                  <TextBlock Classes="hint" Margin="0" Text="{Binding SelectedRecipe.Origin}" />
+                  <TextBlock Classes="hint" Margin="0" Text="{Binding SelectedBlueprint.Origin}" />
                 </StackPanel>
               </Border>
 
@@ -424,14 +408,14 @@
           </DockPanel>
 
           <Border Grid.Row="1" Grid.Column="2" Classes="empty"
-                  IsVisible="{Binding !HasSelectedRecipe}" VerticalAlignment="Top">
+                  IsVisible="{Binding !HasSelectedBlueprint}" VerticalAlignment="Top">
             <StackPanel Spacing="6">
               <Viewbox Classes="mark">
                 <Path Classes="icon mark" Data="{StaticResource IconBook}" />
               </Viewbox>
-              <TextBlock Classes="empty" FontWeight="SemiBold" Text="No recipe selected" />
+              <TextBlock Classes="empty" FontWeight="SemiBold" Text="No blueprint selected" />
               <TextBlock Classes="empty"
-                         Text="Choose an application on the left to see why it is awkward and what the recipe does about it." />
+                         Text="Choose an application on the left to see why it is awkward and what the blueprint does about it." />
             </StackPanel>
           </Border>
 
@@ -669,7 +653,7 @@
       </TabItem>
 
       <!-- =================================================== 4. Commands -->
-      <TabItem Header="Commands">
+      <TabItem Header="Arguments">
         <ScrollViewer>
           <StackPanel Margin="{DynamicResource PagePadding}"
                       MaxWidth="{StaticResource PageMeasure}">
@@ -678,16 +662,16 @@
               <Border Classes="pageicon">
                 <Path Classes="icon" Data="{StaticResource IconTerminal}" />
               </Border>
-              <TextBlock Classes="h1" Text="Commands to run" Margin="0" VerticalAlignment="Center" />
+              <TextBlock Classes="h1" Text="Arguments" Margin="0" VerticalAlignment="Center" />
             </StackPanel>
             <TextBlock Classes="sub"
-                       Text="Executables the package runs during install or uninstall. Each runs deferred and without impersonation, so it executes as SYSTEM with the payload already on disk." />
+                       Text="The programs this package runs during install or uninstall, and the arguments they run with - the silent switches for a wrapped installer, say. Each runs as SYSTEM with the payload already on disk." />
 
             <Border Classes="card">
               <StackPanel Spacing="16">
 
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                  <TextBlock Classes="eyebrow" Text="CUSTOM ACTIONS" Margin="0" VerticalAlignment="Center" />
+                  <TextBlock Classes="eyebrow" Text="PROGRAMS THIS PACKAGE RUNS" Margin="0" VerticalAlignment="Center" />
                   <Button Classes="info">
                     <Button.Flyout>
                       <Flyout>
@@ -697,6 +681,21 @@
                     </Button.Flyout>
                   </Button>
                 </StackPanel>
+
+                <!--
+                  The install-location surprise: a wrapped installer places files
+                  where its own switch says, not where the Install folder field
+                  says. Removing the switch does not fall back to a prompt or to
+                  that field - it falls back to the vendor's default.
+                -->
+                <Border Classes="inner">
+                  <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Path Classes="icon" Data="{StaticResource IconAlert}"
+                          VerticalAlignment="Top" Margin="0,2,0,0" />
+                    <TextBlock Classes="disclosure" TextWrapping="Wrap"
+                               Text="These are the plain arguments the program runs with - the silent switches. Where a wrapped installer puts its files is chosen separately when you build (a fixed folder, or the installer&apos;s own default), so you do not set the install directory here." />
+                  </StackPanel>
+                </Border>
 
                 <StackPanel Orientation="Horizontal" Spacing="8">
                   <Button Name="AddRunButton">
@@ -851,6 +850,44 @@
             </StackPanel>
             <TextBlock Classes="sub" Text="The MSI is always produced. Everything else is optional." />
 
+            <!--
+              The build result, made impossible to miss. A finished build used to
+              leave only a status line and a wall of log text that looked no
+              different from before it ran; this banner says plainly that it is
+              done, names the file, and puts the folder one click away.
+            -->
+            <Border Classes="verdict" Classes.pass="{Binding BuildSucceeded}"
+                    IsVisible="{Binding HasBuildResult}" Margin="0,4,0,0">
+              <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto">
+                <Path Grid.Row="0" Grid.Column="0" Grid.RowSpan="2" Classes="icon" Margin="0,2,13,0"
+                      Data="{StaticResource IconCheckCircle}"
+                      IsVisible="{Binding BuildSucceeded}" />
+                <Path Grid.Row="0" Grid.Column="0" Grid.RowSpan="2" Classes="icon" Margin="0,2,13,0"
+                      Data="{StaticResource IconAlert}"
+                      IsVisible="{Binding !BuildSucceeded}" />
+
+                <TextBlock Grid.Row="0" Grid.Column="1" Classes="verdicttext"
+                           Classes.pass="{Binding BuildSucceeded}"
+                           Text="{Binding BuildHeadline}" />
+                <TextBlock Grid.Row="1" Grid.Column="1" Classes="mono" Margin="0,3,0,0"
+                           Text="{Binding BuildResultPath}"
+                           IsVisible="{Binding BuildResultPath, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                <TextBlock Grid.Row="2" Grid.Column="1" Classes="disclosure" Margin="0,6,0,0"
+                           Text="{Binding BuildResultDetail}"
+                           IsVisible="{Binding BuildResultDetail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+                <Button Grid.Row="0" Grid.Column="2" Grid.RowSpan="2"
+                        Name="ResultShowFolderButton" Classes="quiet"
+                        VerticalAlignment="Top" Margin="12,0,0,0"
+                        IsVisible="{Binding BuildSucceeded}">
+                  <StackPanel Orientation="Horizontal" Spacing="7">
+                    <Path Classes="icon" Data="{StaticResource IconFolder}" />
+                    <TextBlock Text="Show folder" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Button>
+              </Grid>
+            </Border>
+
             <Border Classes="card">
               <StackPanel Spacing="16">
                 <TextBlock Classes="eyebrow" Text="OUTPUT" Margin="0" />
@@ -964,7 +1001,7 @@
                           <Button.Flyout>
                             <Flyout>
                               <TextBlock Classes="disclosure"
-                                         Text="This is a variable name, not the password. MsiMaker reads the password from that variable on the machine doing the build, and never stores it. A project file belongs in source control, and a secret written into one would go to source control with it - which is why there is no password box here and no password field in the project format." />
+                                         Text="This is a variable name, not the password. MsiMaker reads the password from that variable on the machine doing the build, and never stores it. A blueprint file belongs in source control, and a secret written into one would go to source control with it - which is why there is no password box here and no password field in the blueprint format." />
                             </Flyout>
                           </Button.Flyout>
                         </Button>
@@ -982,7 +1019,7 @@
                         <Button.Flyout>
                           <Flyout>
                             <TextBlock Classes="disclosure"
-                                       Text="The certificate must already be installed on the machine doing the build, in a store the build account can read. Nothing secret is stored in the project: only the thumbprint that selects it." />
+                                       Text="The certificate must already be installed on the machine doing the build, in a store the build account can read. Nothing secret is stored in the blueprint: only the thumbprint that selects it." />
                           </Flyout>
                         </Button.Flyout>
                       </Button>
@@ -1004,7 +1041,7 @@
                           <TextBlock Classes="verdicttext warn" FontWeight="Normal" FontSize="12.5"
                                      Text="The command line signtool is given is covered by tests, but no package has been signed through an actual Trusted Signing account from here. Treat the first run as something to prove on one package, not as a step in a fleet build." />
                           <TextBlock Classes="verdicttext warn" FontWeight="Normal" FontSize="12.5"
-                                     Text="Credentials are not project settings and cannot be entered here. They come from the ambient Azure credential chain - AZURE_TENANT_ID, AZURE_CLIENT_ID and AZURE_CLIENT_SECRET, or an interactive az login - so the private key never reaches the build machine at all." />
+                                     Text="Credentials are not blueprint settings and cannot be entered here. They come from the ambient Azure credential chain - AZURE_TENANT_ID, AZURE_CLIENT_ID and AZURE_CLIENT_SECRET, or an interactive az login - so the private key never reaches the build machine at all." />
                         </StackPanel>
                       </Grid>
                     </Border>
@@ -1037,7 +1074,7 @@
                           <Button.Flyout>
                             <Flyout>
                               <TextBlock Classes="disclosure"
-                                         Text="The profile, not the project, decides which identity the signature carries." />
+                                         Text="The profile, not the blueprint, decides which identity the signature carries." />
                             </Flyout>
                           </Button.Flyout>
                         </Button>

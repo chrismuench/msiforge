@@ -70,10 +70,17 @@ public static class IntuneWinPackager
         using (var aes = Aes.Create())
         {
             aes.Key = encryptionKey;
+            // The IV is 16 fresh CSPRNG bytes per package, prepended to the
+            // ciphertext and covered by the HMAC below (encrypt-then-MAC). The
+            // analyzer flags any explicit IV assignment; omitting it here would
+            // mean Aes.Create() picking one we could not then write into the
+            // header, which Intune needs in order to decrypt.
             aes.IV = iv;
             aes.Mode = CipherMode.CBC;
             aes.Padding = PaddingMode.PKCS7;
+#pragma warning disable CA5401 // the IV above is per-package CSPRNG output, not a fixed one
             using var encryptor = aes.CreateEncryptor();
+#pragma warning restore CA5401
             ciphertext = encryptor.TransformFinalBlock(payloadZip, 0, payloadZip.Length);
         }
 

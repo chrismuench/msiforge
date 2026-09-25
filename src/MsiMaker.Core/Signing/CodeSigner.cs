@@ -2,6 +2,8 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 
+using System.Text.Json.Serialization;
+
 namespace MsiMaker.Core.Signing;
 
 /// <summary>
@@ -62,7 +64,8 @@ public sealed class SigningOptions
     /// Microsoft.Trusted.Signing.Client package sits somewhere the NuGet cache
     /// sweep below will not look.
     /// </summary>
-    public string? AzureDlibPath { get; set; }
+    [JsonIgnore]
+    public string? AzureDlibPath { get; set; } = Environment.GetEnvironmentVariable("MSIMAKER_AZURE_DLIB");
 
     /// <summary>
     /// RFC 3161 timestamp server. Without a timestamp the signature stops being
@@ -73,8 +76,17 @@ public sealed class SigningOptions
 
     public string DigestAlgorithm { get; set; } = "SHA256";
 
-    /// <summary>Explicit path to signtool.exe or osslsigncode, when discovery is not enough.</summary>
-    public string? SignerPath { get; set; }
+    /// <summary>
+    /// Explicit path to signtool.exe or osslsigncode, when discovery is not enough.
+    ///
+    /// Machine configuration, not project data, and deliberately not serialised:
+    /// this path gets executed. A project file travels - inside a bundle, out of a
+    /// blueprint, from whoever asked for the package - and honouring this field from
+    /// one turns "open someone's bundle and press Build" into running their
+    /// executable. Set MSIMAKER_SIGNER on the machine that does the signing.
+    /// </summary>
+    [JsonIgnore]
+    public string? SignerPath { get; set; } = Environment.GetEnvironmentVariable("MSIMAKER_SIGNER");
 
     /// <summary>
     /// Sign in process instead of driving an external tool. Null means decide,
@@ -312,6 +324,23 @@ public static class CodeSigner
     {
         if (!options.Enabled) return new SigningResult(false, "none", "Signing is not enabled for this project.");
 
+        // Refused rather than obliged. signtool accepts a PFX password only as
+        // /p on the command line, readable by any process that can enumerate
+        // command lines, and there is nothing to gain by it: the in-process
+        // signer produces a signature verified byte for byte against signtool's
+        // own, needs nothing installed, and keeps the password in this process.
+        if (options.UseManagedSigner == false
+            && CanSignInProcess(options)
+            && OperatingSystem.IsWindows()
+            && !string.IsNullOrEmpty(ReadPassword(options)))
+        {
+            return new SigningResult(false, "none",
+                "UseManagedSigner is false, but signing a password-protected PFX with signtool would "
+                + "put the password on a command line where any process on the machine can read it. "
+                + "signtool has no way to take it otherwise. Remove UseManagedSigner to sign in "
+                + "process, which needs nothing installed and produces the same signature.");
+        }
+
         if (options.UseManagedSigner ?? CanSignInProcess(options))
         {
             string? pfxPassword = ReadPassword(options);
@@ -330,7 +359,7 @@ public static class CodeSigner
         if (signer is null)
             return new SigningResult(false, "none",
                 "No signer found. Install the Windows SDK (signtool.exe) or osslsigncode, "
-                + "or set SignerPath in the project.");
+                + "or set MSIMAKER_SIGNER to its path.");
 
         bool useOssl = Path.GetFileNameWithoutExtension(signer)
             .Equals("osslsigncode", StringComparison.OrdinalIgnoreCase);
@@ -345,7 +374,7 @@ public static class CodeSigner
             if (useOssl)
                 return new SigningResult(false, signer,
                     "Azure Trusted Signing runs through signtool's dlib hook, which osslsigncode does not "
-                    + "implement. Install the Windows SDK, or point SignerPath at signtool.exe.");
+                    + "implement. Install the Windows SDK, or set MSIMAKER_SIGNER to signtool.exe.");
             return SignWithAzureTrustedSigning(signer, msiPath, options);
         }
 
@@ -384,6 +413,14 @@ public static class CodeSigner
                 break;
 
             case SigningMode.Pfx:
+                // signtool takes a PFX password only as /p on the command line,
+                // where every process on the machine can read it out of the
+                // process list. osslsigncode has -readpass and is used that way
+                // below; signtool has no equivalent, so the in-process signer -
+                // which needs no external tool and never forms a command line -
+                // is the only PFX path offered on Windows. Reaching here means a
+                // project set UseManagedSigner false, and the right answer is to
+                // say so rather than to leak the password.
                 args.Add("/f");
                 args.Add(options.CertificatePath!);
                 if (!string.IsNullOrWhiteSpace(password)) { args.Add("/p"); args.Add(password!); }
@@ -435,7 +472,7 @@ public static class CodeSigner
         + (string.IsNullOrWhiteSpace(options.AzureDlibPath) ? "" : $" at {options.AzureDlibPath}")
         + $". It ships in the {TrustedSigningPackage} NuGet package: restore or install that package "
         + $"(the file lands under .nuget/packages/{TrustedSigningPackage.ToLowerInvariant()}/<version>/bin/x64/), "
-        + "or set AzureDlibPath to it.";
+        + "or set MSIMAKER_AZURE_DLIB to it.";
 
     private static SigningResult SignWithAzureTrustedSigning(string signer, string msiPath, SigningOptions options)
     {

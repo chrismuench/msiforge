@@ -102,13 +102,18 @@ public sealed class SummaryInfo
 
     // ---------------------------------------------------------------- parsing
 
+    /// <summary>The largest FILETIME DateTime.FromFileTimeUtc will accept.</summary>
+    private const long MaxFileTime = 2650467743999999999L;
+
     public static SummaryInfo Parse(byte[] data)
     {
         var si = new SummaryInfo();
         if (data.Length < 48) return si;
 
         int sectionOffset = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(44));
-        if (sectionOffset <= 0 || sectionOffset + 8 > data.Length) return si;
+        // Subtraction, not addition: sectionOffset + 8 overflows to a negative for
+        // a value near int.MaxValue and the guard then lets it through.
+        if (sectionOffset <= 0 || sectionOffset > data.Length - 8) return si;
 
         int propCount = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(sectionOffset + 4));
         int codepage = 65001;
@@ -120,7 +125,7 @@ public sealed class SummaryInfo
             if (e + 8 > data.Length) break;
             if (BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(e)) != PidCodepage) continue;
             int o = sectionOffset + BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(e + 4));
-            if (o + 6 <= data.Length) codepage = BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(o + 4));
+            if (o >= 0 && o <= data.Length - 6) codepage = BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(o + 4));
             break;
         }
         var enc = codepage == 65001 ? Encoding.UTF8 : Encoding.Latin1;
@@ -130,8 +135,10 @@ public sealed class SummaryInfo
             int e = sectionOffset + 8 + i * 8;
             if (e + 8 > data.Length) break;
             int pid = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(e));
+            // The per-property offset is a signed value read from the file, so it
+            // needs a floor as well as a ceiling.
             int off = sectionOffset + BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(e + 4));
-            if (off + 4 > data.Length) continue;
+            if (off < 0 || off > data.Length - 4) continue;
 
             int type = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(off));
             switch (type)
@@ -149,7 +156,7 @@ public sealed class SummaryInfo
                 case 30 when off + 8 <= data.Length: // VT_LPSTR
                 {
                     int len = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(off + 4));
-                    if (len > 0 && off + 8 + len <= data.Length)
+                    if (len > 0 && len <= data.Length - off - 8)
                     {
                         int trimmed = len;
                         while (trimmed > 0 && data[off + 8 + trimmed - 1] == 0) trimmed--;
@@ -160,8 +167,10 @@ public sealed class SummaryInfo
                 }
                 case 64 when off + 12 <= data.Length: // VT_FILETIME
                 {
+                    // FromFileTimeUtc throws outside the representable range, and the
+                    // value is whatever the file says.
                     long ft = BinaryPrimitives.ReadInt64LittleEndian(data.AsSpan(off + 4));
-                    if (ft > 0) si.Properties[pid] = DateTime.FromFileTimeUtc(ft);
+                    if (ft > 0 && ft <= MaxFileTime) si.Properties[pid] = DateTime.FromFileTimeUtc(ft);
                     break;
                 }
             }

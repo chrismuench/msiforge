@@ -15,7 +15,7 @@
       "Folder": "\\HP",
       "Description": "Analyses the device against HP's reference and installs missing or out-of-date BIOS, firmware, drivers and software.",
       "ExePath": "HPImageAssistant.exe",
-      "Arguments": "/Operation:Analyze /Category:All /Selection:All /Action:Install /Silent /Noninteractive /ReportFolder:C:\\ProgramData\\HP\\HPIA\\Reports /SoftpaqDownloadFolder:C:\\ProgramData\\HP\\HPIA\\Softpaqs",
+      "Arguments": "/Operation:Analyze /Category:All /Selection:All /Action:Install /Silent /Noninteractive /ReportFolder:%ProgramFiles%\\HP\\HPIA\\Reports /SoftpaqDownloadFolder:%ProgramFiles%\\HP\\HPIA\\Softpaqs",
       "Trigger": "Weekly",
       "DaysOfWeek": ["Sunday"],
       "StartTime": "03:00",

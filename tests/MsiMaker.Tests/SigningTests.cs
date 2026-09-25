@@ -312,7 +312,9 @@ public class SigningTests
 
         Assert.Contains("Azure.CodeSigning.Dlib.dll", message);
         Assert.Contains("Microsoft.Trusted.Signing.Client", message);
-        Assert.Contains("AzureDlibPath", message);
+        // The path is machine configuration now, not a project field, so the
+        // message has to name the environment variable that actually sets it.
+        Assert.Contains("MSIMAKER_AZURE_DLIB", message);
     }
 
     [Fact]

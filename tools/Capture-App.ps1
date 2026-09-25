@@ -24,13 +24,41 @@ using System;
 using System.Runtime.InteropServices;
 public class AppShot {
     [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr dc, uint flags);
+    [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc f, IntPtr l);
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
     [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
     [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint x, uint y, uint d, IntPtr e);
     [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
+    public delegate bool EnumProc(IntPtr h, IntPtr l);
 
     public const uint RenderFullContent = 0x00000002;
+
+    // Process.MainWindowHandle is not reliable here. MsiMaker is a console-subsystem
+    // binary that frees its console before opening the window, and the handle then
+    // resolves to a hidden 0x0 message-only window - PrintWindow "succeeds" against
+    // it and writes nothing. Pick the largest visible top-level window the process
+    // owns instead, which is unambiguously the one to photograph.
+    public static IntPtr MainWindow(uint pid)
+    {
+        IntPtr best = IntPtr.Zero;
+        int bestArea = 0;
+        EnumWindows((h, l) =>
+        {
+            uint owner;
+            GetWindowThreadProcessId(h, out owner);
+            if (owner != pid || !IsWindowVisible(h)) return true;
+
+            RECT r;
+            if (!GetWindowRect(h, out r)) return true;
+            int area = (r.R - r.L) * (r.B - r.T);
+            if (area > bestArea) { bestArea = area; best = h; }
+            return true;
+        }, IntPtr.Zero);
+        return best;
+    }
 
     public static void Click(int x, int y) {
         SetCursorPos(x, y);
@@ -76,29 +104,33 @@ if ($Arguments.Count -gt 0) { $start['ArgumentList'] = $Arguments }
 $p = Start-Process @start
 
 $deadline = (Get-Date).AddSeconds($WaitSeconds)
-while ((Get-Date) -lt $deadline -and $p.MainWindowHandle -eq 0) {
+$handle = [IntPtr]::Zero
+while ((Get-Date) -lt $deadline) {
+    $handle = [AppShot]::MainWindow([uint32]$p.Id)
+    if ($handle -ne [IntPtr]::Zero) { break }
     Start-Sleep -Milliseconds 400
-    $p.Refresh()
 }
-if ($p.MainWindowHandle -eq 0) { Write-Output "window never opened"; exit 1 }
+if ($handle -eq [IntPtr]::Zero) { Write-Output "window never opened"; exit 1 }
 
-[AppShot]::SetForegroundWindow($p.MainWindowHandle) | Out-Null
+[AppShot]::SetForegroundWindow($handle) | Out-Null
 Start-Sleep -Milliseconds 2500
 
 $r = New-Object AppShot+RECT
-[AppShot]::GetWindowRect($p.MainWindowHandle, [ref]$r) | Out-Null
-Write-Output "window $($r.R - $r.L) x $($r.B - $r.T)"
+[AppShot]::GetWindowRect($handle, [ref]$r) | Out-Null
+$w = $r.R - $r.L; $h = $r.B - $r.T
+Write-Output "window $w x $h"
+if ($w -le 0 -or $h -le 0) { Write-Output "refusing to capture a zero-sized window"; exit 1 }
 
 $index = 0
 $path = Join-Path $OutDir ("step-{0}.png" -f $index)
-Write-Output $(if (Save-Window -Handle $p.MainWindowHandle -Path $path) { "saved $path" } else { "render failed for $path" })
+Write-Output $(if (Save-Window -Handle $handle -Path $path) { "saved $path" } else { "render failed for $path" })
 
 foreach ($x in $StepX) {
     $index++
     [AppShot]::Click($r.L + $x, $r.T + $StepY)
     Start-Sleep -Milliseconds 900
     $path = Join-Path $OutDir ("step-{0}.png" -f $index)
-    Write-Output $(if (Save-Window -Handle $p.MainWindowHandle -Path $path) { "saved $path" } else { "render failed for $path" })
+    Write-Output $(if (Save-Window -Handle $handle -Path $path) { "saved $path" } else { "render failed for $path" })
 }
 
 Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue

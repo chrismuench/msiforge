@@ -3,6 +3,7 @@
   "Name": "Lenovo System Update",
   "Vendor": "Lenovo",
   "Description": "Lenovo's driver and firmware update client, wrapped so the client itself has a version Intune can compare.",
+  "Category": "Device & driver tools",
   "Awkwardness": "As with the Dell equivalent, installing the client updates nothing: System Update installs a Windows service and its own scheduled task, and those are what actually fetch packages, so the application can be perfectly deployed while the estate quietly stops updating. The installer's file name carries the version and changes with every release, which breaks any Intune command line that names the EXE - hence the payload here is copied in under a fixed name. Lenovo also has no stable download URL: you fetch the current build from the support site, so nothing about this package can be automated end to end without a mirror of your own.",
   "DownloadUrl": "https://support.lenovo.com/solutions/ht003029",
   "DownloadNotes": "Fetch the current System Update build from Lenovo's support site. The file name changes every release (system_update_X.YY.ZZ.NN.exe), so record which build you packaged.",
@@ -24,7 +25,10 @@
     "ManufacturerFolder": "Lenovo",
     "InstallFolder": "System Update Wrapper",
     "Files": [
-      { "SourcePath": "{payload}", "TargetPath": "setup.exe" }
+      {
+        "SourcePath": "{payload}",
+        "TargetPath": "setup.exe"
+      }
     ],
     "Run": [
       {

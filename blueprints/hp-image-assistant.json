@@ -3,18 +3,24 @@
   "Name": "HP Image Assistant",
   "Vendor": "HP Inc.",
   "Description": "HP's BIOS, firmware and driver update engine, packaged as a real MSI with a weekly scheduled task so it keeps running after the deployment finishes.",
+  "Category": "Device & driver tools",
   "Awkwardness": "HP's own Intune guidance wraps hpia.exe in an Install.cmd and detects on \"the file HPImageAssistant.exe exists\". That rule can never go from true to false, so once a device has any version of HPIA it looks compliant forever and a newer HPIA is never deployed. The underlying problem is that a SoftPaq extracts rather than installs: nothing is registered, there is no entry in Programs and Features, no version for Intune to compare, and the documented uninstall is a recursive delete. Shipping the extracted files as an MSI instead gives Intune a ProductCode and a version to work with, and gives the device a genuine uninstall.",
   "DownloadUrl": "https://ftp.hp.com/pub/caps-softpaq/cmit/HPIA.html",
-  "DownloadNotes": "Download the SoftPaq (spNNNNNN.exe) and extract it first: hpia.exe /s /e /f C:\\hpia-extracted. The payload for this recipe is that extracted FOLDER, not the SoftPaq itself.",
-  "SetupFileHint": "A folder holding HPImageAssistant.exe with its Lib and Redist subfolders - around 136 files, 27 MB.",
+  "DownloadNotes": "Download the HP Image Assistant SoftPaq (spNNNNNN.exe) and hand it to MsiMaker as-is. MsiMaker runs the SoftPaq's own extractor (-s -e -f) to unpack it before packaging - extract only, so nothing is installed on this machine. You no longer have to extract it by hand first.",
+  "SetupFileHint": "The HP Image Assistant SoftPaq you downloaded (spNNNNNN.exe, around 30 MB). MsiMaker extracts it to a folder of ~136 files (HPImageAssistant.exe with its Lib and Redist subfolders) and packages that.",
+  "Extract": {
+    "Switches": "-s -e -f\"{dest}\"",
+    "MarkerFile": "HPImageAssistant.exe"
+  },
   "Verified": true,
   "Notes": [
     "Set Version to the HPIA version you extracted before building. Intune upgrades on the ProductCode, which is derived from that version, so a stale version means a package that never supersedes the one already out there.",
     "Verified in this repository: built, installed, upgraded and uninstalled under msiexec. 27 MB of payload compressed to a 10.9 MB package.",
-    "The task writes reports and downloads under C:\\ProgramData\\HP\\HPIA. If you move that, change ReportFolder and SoftpaqDownloadFolder together.",
+    "The task writes reports and downloads under %ProgramFiles%\\HP\\HPIA, which Task Scheduler expands at run time. Keep them somewhere ordinary users cannot write. HP documents C:\\ProgramData\\HP, but ProgramData grants every user container-inherit write and add-subdirectory, and CREATOR OWNER full control over anything they create - so a SoftPaq staging folder there is a directory a standard user can plant a DLL in, which HPIA then loads as SYSTEM on the next run. C:\\Windows\\Temp is no better; it grants Users write and add-subdirectory too. If you move these, change ReportFolder and SoftpaqDownloadFolder together, and check the target with icacls first.",
     "The registry Version value duplicates the project Version deliberately, as a detection anchor for anything that cannot read the ProductCode. Keep the two in step.",
     "RunOnBattery is false and the random delay is two hours: a fleet that all wakes at 03:00 and downloads SoftPaqs at once is its own kind of outage.",
-    "CloseProcesses lists HPImageAssistant.exe, so an upgrade can replace files that a running analysis is holding open instead of silently scheduling a reboot nobody sees."
+    "CloseProcesses lists HPImageAssistant.exe, so an upgrade can replace files that a running analysis is holding open instead of silently scheduling a reboot nobody sees.",
+    "Verified means the package: built, installed, upgraded in place with HPImageAssistant.exe running, and uninstalled cleanly, checked against Windows Installer itself. It does not mean an HPIA analyze run has been exercised - that needs HP hardware. If you are the first to run it on a real device, check that the Reports and Softpaqs folders are created where you expect."
   ],
   "Project": {
     "ProductName": "HP Image Assistant",
@@ -25,7 +31,9 @@
     "ManufacturerFolder": "HP",
     "InstallFolder": "HPIA",
     "Folders": [
-      { "SourceDir": "{payload}" }
+      {
+        "SourceDir": "{payload}"
+      }
     ],
     "Tasks": [
       {
@@ -33,9 +41,11 @@
         "Folder": "\\HP",
         "Description": "Analyses the device against HP's reference and installs missing or out-of-date BIOS, firmware, drivers and software.",
         "ExePath": "HPImageAssistant.exe",
-        "Arguments": "/Operation:Analyze /Category:All /Selection:All /Action:Install /Silent /Noninteractive /ReportFolder:C:\\ProgramData\\HP\\HPIA\\Reports /SoftpaqDownloadFolder:C:\\ProgramData\\HP\\HPIA\\Softpaqs",
+        "Arguments": "/Operation:Analyze /Category:All /Selection:All /Action:Install /Silent /Noninteractive /ReportFolder:%ProgramFiles%\\HP\\HPIA\\Reports /SoftpaqDownloadFolder:%ProgramFiles%\\HP\\HPIA\\Softpaqs",
         "Trigger": "Weekly",
-        "DaysOfWeek": ["Sunday"],
+        "DaysOfWeek": [
+          "Sunday"
+        ],
         "StartTime": "03:00",
         "RunAsSystem": true,
         "HighestPrivileges": true,
@@ -46,9 +56,16 @@
         "ExecutionTimeLimit": "PT3H"
       }
     ],
-    "CloseProcesses": ["HPImageAssistant.exe"],
+    "CloseProcesses": [
+      "HPImageAssistant.exe"
+    ],
     "Registry": [
-      { "Root": "HKLM", "Key": "SOFTWARE\\HP\\HPIA", "Name": "Version", "Value": "5.3.7" }
+      {
+        "Root": "HKLM",
+        "Key": "SOFTWARE\\HP\\HPIA",
+        "Name": "Version",
+        "Value": "5.3.7"
+      }
     ],
     "Arp": {
       "AboutUrl": "https://hp.com/go/clientmanagement",

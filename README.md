@@ -32,39 +32,121 @@ an oracle to diff output against. It ships with nothing.
 
 ## Getting started
 
+A release is **one file**. Download it and run it — there is no installer, and
+no .NET runtime to install first.
+
+The same binary is the desktop app and the command line. Run it with no
+arguments and you get the window; run it with a command and you get the CLI:
+
 ```bash
-dotnet build MsiMaker.slnx
-
-# what can this machine do?
-dotnet run --project src/MsiMaker.Cli -- doctor
-
-# build and verify a package end to end
-dotnet run --project src/MsiMaker.Cli -- selftest
+MsiMaker                      # the app
+MsiMaker doctor               # what can this machine do?
+MsiMaker selftest             # build and verify a package end to end
+MsiMaker build myapp.msimaker
 ```
 
-The desktop app:
+On macOS the binary is not notarised, so clear the quarantine flag once:
+`xattr -d com.apple.quarantine ./MsiMaker-macos-arm64 && chmod +x ./MsiMaker-macos-arm64`.
+
+From source:
 
 ```bash
-dotnet run --project src/MsiMaker.App
+dotnet build MsiMaker.slnx
+dotnet run --project src/MsiMaker.App -- doctor
+dotnet run --project src/MsiMaker.App              # the app
 ```
 
 ### The CLI
 
 ```
-build      <project|bundle> [out.msi]   Build an MSI
-pack       <project.json> [out]         Bundle a project and its payload into one file
+build      <blueprint|bundle> [out.msi] Build an MSI
+pack       <blueprint.json> [out]       Bundle a blueprint and its payload into one file
 analyze    <installer.exe> [proj.json]  Identify the installer and its silent switches
 upgrade    <old.msi> <new.msi>          Will Intune actually upgrade? Check before shipping
 intune     <file.msi>                   Exactly what to enter in the Intune portal
 intunewin  <file.msi> [out]             Wrap an MSI as a Win32 .intunewin package
-sign       <file.msi> [project.json]    Authenticode-sign a package
-recipes                                 List the built-in package recipes
-recipe     <id> <out.json> [payload]    Start a project from a recipe
+sign       <file.msi> [blueprint.json] Authenticode-sign a package
+blueprints                              List the built-in package blueprints
+blueprint  <id> <out.json> [payload]    Start a blueprint from a preloaded one
 explain    <msiexec.log>                Say what actually went wrong in an install log
 inspect    <file.msi>                   Show identity, upgrade and table summary
 doctor                                  What this machine can and cannot do
 selftest                                Build and verify a package end to end
 ```
+
+## Parameters, and asking a package what it takes
+
+A package that bakes every decision in at build time has to be rebuilt for every
+variation of it. Declare the values instead, and they become ordinary MSI
+properties an administrator can set on the command line:
+
+```json
+"Parameters": [
+  { "Name": "INSTALLARGS", "Default": "/quiet /norestart",
+    "Description": "Switches passed to the vendor installer." },
+  { "Name": "LICENSEKEY", "Description": "Licence key. Leave empty for a trial." }
+]
+```
+
+Reference one anywhere a command is built — `"Arguments": "[INSTALLARGS]"` — and
+it resolves at install time:
+
+```
+msiexec /i app.msi /qn INSTALLARGS="/S /v/qn" LICENSEKEY=ABC-123
+```
+
+`INSTALLFOLDER` works the same way without being declared, so the install
+location can be moved without a rebuild.
+
+Two things are handled for you, because both fail silently otherwise. A property
+name that is not entirely upper case is **ignored** by Windows Installer when it
+appears on a command line — so a lower-case name is a build error here rather
+than a parameter that quietly does nothing. And a public property is **dropped
+when the install elevates** unless it is listed in `SecureCustomProperties`,
+which every declared parameter is.
+
+### `HELP=1`
+
+Every package MsiMaker builds can say what it accepts:
+
+```
+msiexec /i app.msi HELP=1
+```
+
+which shows a dialog listing every parameter, its description and its default,
+then exits without installing anything. Under `/qn` there is nobody to show it
+to, so the same text goes to the log.
+
+It is a property rather than a switch because `msiexec` keeps `/?` and `/help`
+for itself — a package never sees them.
+
+## Where a package installs, and who can write there
+
+`%ProgramFiles%` is the default, and it is the safe one: Windows grants ordinary
+users read and execute there and nothing else.
+
+`C:\ProgramData` is not the same. Its default ACL gives `BUILTIN\Users`
+container-inherit **write and add-subdirectory**, and `CREATOR OWNER` full
+control over anything they create — and every folder made underneath it inherits
+that. So a custom action or a scheduled task running as SYSTEM out of a folder
+there can be handed a DLL to load by any standard user on the machine. No race,
+no pre-creation, no admin rights. (`C:\Windows\Temp` has the same weakness, for
+the same reason — check with `icacls` before trusting a directory.)
+
+A package that installs under ProgramData therefore gets its install folder
+locked down: `MsiLockPermissionsEx` with a protected DACL, SYSTEM and
+Administrators full, everyone else read and execute, inheritance broken. The
+build says so in a warning. Set `"LockInstallFolder": false` if the application
+genuinely needs to write into its own folder — and if it also runs something as
+SYSTEM from there, the build will warn about that instead, because that is the
+combination that hands out SYSTEM.
+
+Scheduled tasks get the same treatment at the file level. A task that runs as
+SYSTEM is stored under `System32\Tasks`, and the Task Scheduler service
+already gives it a protected descriptor - but the file still inherits from its
+folder, so the package breaks inheritance on the task it registered (that file
+only, never the shared vendor folder) and fixes it to SYSTEM, Administrators and
+read-only for everyone else.
 
 ## When a deployment fails
 
@@ -116,40 +198,42 @@ osslsigncode were pulled out of already-signed packages and required to match
 byte for byte before a single signature was produced — because a subtly wrong
 digest yields a package that looks signed and is rejected on the device.
 
-## Projects and bundles
+## Blueprints and bundles
 
-A project is a `.json`. A **bundle** is a `.msimaker` — a zip carrying the
-project *and every payload file*, so a package is one artefact you can version,
-hand over, or archive next to the MSI it produced. A bare `.json` names payload
-files on the machine that wrote it, and breaks the moment it moves.
+A blueprint is a `.json`. A **bundle** is a `.msimaker` — a zip carrying the
+blueprint *and every payload file, including the original installer* — so it is
+one artefact you can version, hand over, archive next to the MSI it produced, or
+use to rebuild the exact same package on another machine. A bare `.json` names
+payload files on the machine that wrote it, and breaks the moment it moves.
 
 ```bash
 msimaker pack hpia.json HPIA.msimaker
 msimaker build HPIA.msimaker
 ```
 
-## The recipe library
+## The blueprint library
 
 Some applications do not package the obvious way, and the knowledge of *why*
-tends to live in whoever last researched it. `msimaker recipes` lists built-in
-recipes that carry both the working configuration and the reason it is needed.
+tends to live in whoever last researched it. `msimaker blueprints` lists built-in
+blueprints that carry both the working configuration and the reason it is needed,
+grouped into applications and device/driver tools.
 
-Only `hp-image-assistant` and `7zip` are marked **verified** — those two were
-actually built, installed, upgraded and uninstalled here. The rest carry
-vendor-documented switches and say so, because a wrong silent switch fails
-quietly across a fleet.
+Only `hp-image-assistant` is marked **verified** — it was actually built,
+installed, upgraded and uninstalled here. The rest are marked **vendor docs**:
+their switches come from the vendor's own documentation and simply have not been
+run here, so give one a test install before a fleet rollout.
 
-Add your own by dropping JSON into `%APPDATA%\msimaker\recipes` (or wherever
-`MSIMAKER_RECIPES` points). A file reusing a built-in id replaces it.
+Add your own by dropping JSON into `%APPDATA%\msimaker\blueprints` (or wherever
+`MSIMAKER_BLUEPRINTS` points). A file reusing a built-in id replaces it.
 
 ## Layout
 
 ```
-src/MsiMaker.Core   the engine: compound file, MSI tables, cabinet, recipes, signing
-src/MsiMaker.Cli    headless build, for CI
+src/MsiMaker.Core   the engine: compound file, MSI tables, cabinet, blueprints, signing
+src/MsiMaker.Cli    the command line, linked into the app
 src/MsiMaker.App    Avalonia desktop GUI
 tools/              development-time verification helpers
-recipes/            the built-in recipe library
+blueprints/            the built-in blueprint library (source folder)
 ```
 
 ## Testing
@@ -170,6 +254,18 @@ fault.
 `tools/Verify-Msi.ps1` opens a package through Windows Installer itself, which
 is the real acceptance test — our own reader agreeing with our own writer proves
 nothing.
+
+The security analyzer rules (`CA2100`, `CA3xxx`, `CA5xxx`) are build errors, not
+warnings. Everything else is left at its default: turning the whole analyzer set
+to `All` produced 246 warnings, which is the same as none. The four suppressions
+in the tree each carry the reason at the point of use — MD5 because the
+`MsiFileHash` table is defined as MD5, SHA-1 because RFC 4122 defines a version 5
+UUID that way, and so on.
+
+Packages, bundles and logs are all read as untrusted input: `inspect` on a
+stranger's MSI, or opening a bundle someone sent, should not be able to hang the
+process, exhaust memory, or run anything. The parsers are hand-written, so that
+is tested rather than assumed.
 
 See [docs/DESIGN.md](docs/DESIGN.md) for the format notes, the upgrade rules the
 tool enforces, and the bugs that were found the hard way.

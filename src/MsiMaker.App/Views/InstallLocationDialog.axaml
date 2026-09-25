@@ -1,0 +1,43 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MsiMaker.App.Views.InstallLocationDialog"
+        Title="Install location"
+        Width="540" SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource WindowBrush}">
+
+  <StackPanel Margin="24" Spacing="16">
+
+    <StackPanel Spacing="6">
+      <TextBlock Name="Heading" Classes="h1" FontSize="18" Margin="0"
+                 Text="Where should this install?" />
+      <TextBlock Classes="sub" Margin="0" TextWrapping="Wrap"
+                 Text="This package runs an installer. Decide where it puts its files - this is not assumed for you." />
+    </StackPanel>
+
+    <!-- Two choices, neither pre-selected: the point is that a choice is made. -->
+    <StackPanel Spacing="12">
+      <RadioButton Name="SpecificChoice" GroupName="loc" Content="Install to a specific folder" />
+      <DockPanel Margin="26,0,0,0" IsEnabled="{Binding #SpecificChoice.IsChecked}">
+        <Button Name="BrowseButton" Content="Browse…" DockPanel.Dock="Right" Margin="8,0,0,0" />
+        <TextBox Name="PathBox" Watermark="C:\Program Files\App" />
+      </DockPanel>
+
+      <RadioButton Name="DefaultChoice" GroupName="loc"
+                   Content="Let the installer use its own default location" />
+
+      <TextBlock Name="UnknownNote" Classes="disclosure" IsVisible="False"
+                 Margin="26,0,0,0" TextWrapping="Wrap"
+                 Text="This installer's family is not recognised, so MsiMaker cannot write a folder into its command line. Choose the installer's default here, or set the switch by hand on the Commands step." />
+    </StackPanel>
+
+    <TextBlock Name="ErrorText" Classes="blocked" IsVisible="False" TextWrapping="Wrap" Margin="26,0,0,0" />
+
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+      <Button Name="CancelButton" Classes="quiet" Content="Cancel" />
+      <Button Name="OkButton" Classes="primary" Content="Use this" />
+    </StackPanel>
+
+  </StackPanel>
+</Window>

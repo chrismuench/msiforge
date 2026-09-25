@@ -393,24 +393,30 @@ public static class MsiSigner
     {
         if (!File.Exists(msiPath)) return new SigningResult(false, "managed", $"Package not found: {msiPath}");
 
-        byte[] bytes;
+        // Everything that touches the file stays inside the try. Verify is asked
+        // about packages from elsewhere - that is the whole point of verifying -
+        // so a malformed one must come back as "not valid", not as an exception
+        // out of a method whose contract is to return a SigningResult. Parsing
+        // the container is also the expensive part, and it was being done a
+        // second time outside the guard.
+        byte[] computed;
         byte[]? embedded;
-        string? algorithmOid;
+        HashAlgorithmName algorithm;
         try
         {
-            bytes = File.ReadAllBytes(msiPath);
-            embedded = ReadEmbeddedDigest(bytes, out algorithmOid);
+            byte[] bytes = File.ReadAllBytes(msiPath);
+            embedded = ReadEmbeddedDigest(bytes, out string? algorithmOid);
+            if (embedded is null)
+                return new SigningResult(false, "managed", "Package carries no signature.");
+
+            algorithm = AlgorithmFromOid(algorithmOid);
+            computed = ComputeDigest(new CfbReader(bytes), algorithm, ReadPrehash(bytes));
         }
-        catch (Exception ex) when (ex is InvalidDataException or CryptographicException or AsnContentException)
+        catch (Exception ex) when (ex is InvalidDataException or CryptographicException
+                                      or AsnContentException or NotSupportedException)
         {
             return new SigningResult(false, "managed", $"Signature could not be read: {ex.Message}");
         }
-
-        if (embedded is null)
-            return new SigningResult(false, "managed", "Package carries no signature.");
-
-        HashAlgorithmName algorithm = AlgorithmFromOid(algorithmOid);
-        byte[] computed = ComputeDigest(new CfbReader(bytes), algorithm, ReadPrehash(bytes));
 
         return computed.AsSpan().SequenceEqual(embedded)
             ? new SigningResult(true, "managed",

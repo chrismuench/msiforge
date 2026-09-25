@@ -5,7 +5,7 @@ using MsiMaker.Core.Build;
 using MsiMaker.Core.Intune;
 using MsiMaker.Core.Model;
 using MsiMaker.Core.Payload;
-using MsiMaker.Core.Recipes;
+using MsiMaker.Core.Blueprints;
 using MsiMaker.Core.Signing;
 
 namespace MsiMaker.App.ViewModels;
@@ -95,15 +95,15 @@ public sealed class CheckRow(UpgradeCheck check)
 }
 
 /// <summary>
-/// One row of the recipe library, and the whole of its detail pane.
+/// One row of the blueprint library, and the whole of its detail pane.
 ///
 /// Everything the detail pane needs is surfaced here rather than reached
 /// through <see cref="Model"/>, because compiled bindings will not walk into a
 /// nullable Core type and the emptiness flags have to be booleans anyway.
 /// </summary>
-public sealed class RecipeRow(Recipe recipe)
+public sealed class BlueprintRow(Blueprint blueprint)
 {
-    public Recipe Model { get; } = recipe;
+    public Blueprint Model { get; } = blueprint;
 
     public string Id => Model.Id;
     public string Name => Model.Name;
@@ -114,7 +114,7 @@ public sealed class RecipeRow(Recipe recipe)
     public string DownloadUrl => Model.DownloadUrl ?? "";
     public bool HasDownloadUrl => !string.IsNullOrWhiteSpace(Model.DownloadUrl);
 
-    /// <summary>Only http and https are ever handed to the shell; see MainWindow.OnOpenRecipeUrl.</summary>
+    /// <summary>Only http and https are ever handed to the shell; see MainWindow.OnOpenBlueprintUrl.</summary>
     public bool CanOpenDownloadUrl =>
         Uri.TryCreate(Model.DownloadUrl, UriKind.Absolute, out var uri)
         && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
@@ -128,29 +128,31 @@ public sealed class RecipeRow(Recipe recipe)
     public IReadOnlyList<string> Notes => Model.Notes;
     public bool HasNotes => Model.Notes.Count > 0;
 
-    public bool IsVerified => Model.Verified;
-    public bool IsUntested => !Model.Verified;
+    /// <summary>The category header shown above the first blueprint in each group.</summary>
+    public string GroupLabel => Model.Category;
 
-    /// <summary>The badge the list shows. Short enough to sit beside a long product name.</summary>
-    public string Badge => Model.Verified ? "VERIFIED" : "UNTESTED";
+    /// <summary>True for the first row of its category, so the list shows one header per group.</summary>
+    public bool IsGroupStart { get; set; }
 
-    public bool WantsFolder => Model.PayloadKind == RecipePayloadKind.Folder;
+    public bool WantsFolder => Model.PayloadKind == BlueprintPayloadKind.Folder;
 
     /// <summary>
     /// Names the shape of the payload on the button itself. An admin who has
     /// downloaded a SoftPaq and is looking for a file will otherwise open the
-    /// picker, find nothing, and conclude the recipe is broken.
+    /// picker, find nothing, and conclude the blueprint is broken.
     /// </summary>
-    public string UseLabel => WantsFolder
-        ? "Use this recipe - choose a folder…"
-        : "Use this recipe - choose a file…";
+    public string UseLabel => Model.Extract is not null
+        ? "Use this blueprint - choose the downloaded installer…"
+        : WantsFolder
+            ? "Use this blueprint - choose a folder…"
+            : "Use this blueprint - choose a file…";
 
     public string PayloadPrompt => Model.PayloadPrompt;
 
     public string TemplateVersion => Model.Project.Version;
 
     public string Origin => Model.FromUserFolder
-        ? "From your recipes folder, so it replaces any built-in recipe of the same id."
+        ? "From your blueprints folder, so it replaces any built-in blueprint of the same id."
         : "Built into MsiMaker.";
 }
 
@@ -189,7 +191,7 @@ public sealed class MainViewModel : ObservableObject
     public ObservableCollection<FileRow> Files { get; } = [];
     public ObservableCollection<RunRow> Run { get; } = [];
     public ObservableCollection<CheckRow> Checks { get; } = [];
-    public ObservableCollection<RecipeRow> Recipes { get; } = [];
+    public ObservableCollection<BlueprintRow> Blueprints { get; } = [];
 
     public MsiProject Project => _project;
 
@@ -198,9 +200,17 @@ public sealed class MainViewModel : ObservableObject
         // Read once at start-up: the library is a handful of embedded resources
         // plus whatever JSON sits in the user folder, and re-reading it on every
         // selection would only make the list flicker.
-        _library = RecipeLibrary.Load();
-        foreach (var recipe in _library.List()) Recipes.Add(new RecipeRow(recipe));
-        SelectedRecipe = Recipes.FirstOrDefault();
+        _library = BlueprintLibrary.Load();
+        string? lastGroup = null;
+        foreach (var blueprint in _library.List())
+        {
+            // The list is already ordered by category, so a change of category
+            // marks the first row of a new group - the one that shows the header.
+            var row = new BlueprintRow(blueprint) { IsGroupStart = blueprint.Category != lastGroup };
+            lastGroup = blueprint.Category;
+            Blueprints.Add(row);
+        }
+        SelectedBlueprint = Blueprints.FirstOrDefault();
 
         RefreshWizard();
     }
@@ -217,7 +227,7 @@ public sealed class MainViewModel : ObservableObject
         new(1, "Start", false),
         new(2, "Payload", false),
         new(3, "Identity", false),
-        new(4, "Commands", true),
+        new(4, "Arguments", true),
         new(5, "Upgrade check", true),
         new(6, "Build", false),
     ];
@@ -272,7 +282,7 @@ public sealed class MainViewModel : ObservableObject
 
     private bool StepIsDone(int index) => index switch
     {
-        // "Start" is satisfied by any route out of it - a recipe, an opened
+        // "Start" is satisfied by any route out of it - a blueprint, an opened
         // project, or simply typing a name after starting blank.
         0 => Files.Count > 0 || !string.IsNullOrWhiteSpace(ProductName),
         1 => Files.Count > 0,
@@ -307,31 +317,31 @@ public sealed class MainViewModel : ObservableObject
 
     // ------------------------------------------------------------- library
 
-    private readonly RecipeLibrary _library;
+    private readonly BlueprintLibrary _library;
 
-    private RecipeRow? _selectedRecipe;
-    public RecipeRow? SelectedRecipe
+    private BlueprintRow? _selectedBlueprint;
+    public BlueprintRow? SelectedBlueprint
     {
-        get => _selectedRecipe;
-        set { if (Set(ref _selectedRecipe, value)) Raise(nameof(HasSelectedRecipe)); }
+        get => _selectedBlueprint;
+        set { if (Set(ref _selectedBlueprint, value)) Raise(nameof(HasSelectedBlueprint)); }
     }
 
-    public bool HasSelectedRecipe => _selectedRecipe is not null;
+    public bool HasSelectedBlueprint => _selectedBlueprint is not null;
 
-    /// <summary>Where a user's own recipe JSON is read from, shown so it can be found.</summary>
-    public string RecipeUserDirectory => _library.UserDirectory;
+    /// <summary>Where a user's own blueprint JSON is read from, shown so it can be found.</summary>
+    public string BlueprintUserDirectory => _library.UserDirectory;
 
-    public bool HasRecipeProblems => _library.Problems.Count > 0;
+    public bool HasBlueprintProblems => _library.Problems.Count > 0;
 
     /// <summary>Files in the user folder that would not parse. Silence here would be worse.</summary>
-    public string RecipeProblems =>
-        "Ignored in your recipes folder: " + string.Join("; ", _library.Problems);
+    public string BlueprintProblems =>
+        "Ignored in your blueprints folder: " + string.Join("; ", _library.Problems);
 
     /// <summary>
-    /// Replaces the current project with a recipe's template, payload filled in.
+    /// Replaces the current project with a blueprint's template, payload filled in.
     /// </summary>
-    public void UseRecipe(Recipe recipe, string payloadPath) =>
-        LoadProject(RecipeLibrary.Instantiate(recipe, payloadPath));
+    public void UseBlueprint(Blueprint blueprint, string payloadPath) =>
+        LoadProject(BlueprintLibrary.Instantiate(blueprint, payloadPath));
 
     // ------------------------------------------------------------- identity
 
@@ -411,6 +421,37 @@ public sealed class MainViewModel : ObservableObject
 
     private string _outputPath = "";
     public string OutputPath { get => _outputPath; set => Set(ref _outputPath, value); }
+
+    // --------------------------------------------------------- build outcome
+    // A build finishing has to be unmistakable. The status line and the log are
+    // easy to miss - they look the same whether a build just ran or not - so the
+    // Build tab shows a result banner that is plainly a success or a failure,
+    // names the file, and carries the one action you want next.
+
+    private bool _hasBuildResult;
+    public bool HasBuildResult { get => _hasBuildResult; set => Set(ref _hasBuildResult, value); }
+
+    private bool _buildSucceeded;
+    public bool BuildSucceeded { get => _buildSucceeded; set => Set(ref _buildSucceeded, value); }
+
+    private string _buildHeadline = "";
+    public string BuildHeadline { get => _buildHeadline; set => Set(ref _buildHeadline, value); }
+
+    private string _buildResultPath = "";
+    public string BuildResultPath { get => _buildResultPath; set => Set(ref _buildResultPath, value); }
+
+    private string _buildResultDetail = "";
+    public string BuildResultDetail { get => _buildResultDetail; set => Set(ref _buildResultDetail, value); }
+
+    /// <summary>Records a finished build so the Build tab can show it plainly.</summary>
+    public void ShowBuildResult(bool succeeded, string headline, string path, string detail)
+    {
+        BuildSucceeded = succeeded;
+        BuildHeadline = headline;
+        BuildResultPath = path;
+        BuildResultDetail = detail;
+        HasBuildResult = true;
+    }
 
     // -------------------------------------------------------------- signing
 
@@ -610,9 +651,13 @@ public sealed class MainViewModel : ObservableObject
     /// Runs the detective over an executable and seeds identity and switches
     /// from what it finds.
     /// </summary>
-    public void Analyse(string path)
+    public async Task AnalyseAsync(string path)
     {
-        var a = InstallerDetective.Analyse(path);
+        // Reading a file someone else produced is the slow part, and on a
+        // malformed one it can be very slow indeed. Held on the UI thread that
+        // is a window frozen with no cancel and no explanation, so the parse
+        // happens off it and only the result is applied here.
+        var a = await Task.Run(() => InstallerDetective.Analyse(path));
         HasAnalysis = true;
         AnalysisSummary = $"{a.KindName}  -  confidence {a.Confidence}%";
 
@@ -689,10 +734,12 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>True once a comparison has run, so the tab can show a result instead of an empty grid.</summary>
     public bool HasChecks => Checks.Count > 0;
 
-    public void RunUpgradeCheck(string previous, string candidate)
+    public async Task RunUpgradeCheckAsync(string previous, string candidate)
     {
+        // Both of these are MSIs from elsewhere - the deployed one especially -
+        // so the same reasoning as AnalyseAsync applies, twice over.
+        var report = await Task.Run(() => UpgradeDoctor.Compare(previous, candidate));
         Checks.Clear();
-        var report = UpgradeDoctor.Compare(previous, candidate);
         foreach (var c in report.Checks) Checks.Add(new CheckRow(c));
         Verdict = report.Summary;
         VerdictIsGood = report.Verdict == UpgradeVerdict.UpgradesInPlace;
@@ -702,9 +749,11 @@ public sealed class MainViewModel : ObservableObject
 
     // --------------------------------------------------------------- build
 
-    public BuildResult Build(string outputPath)
+    public async Task<BuildResult> BuildAsync(string outputPath)
     {
-        var result = MsiBuilder.Build(_project, outputPath);
+        // Cabbing a few hundred megabytes of payload is not something to do on
+        // the thread that is meant to be redrawing the progress line.
+        var result = await Task.Run(() => MsiBuilder.Build(_project, outputPath));
         Raise(nameof(ProductCodePreview));
         return result;
     }
@@ -729,7 +778,7 @@ public sealed class MainViewModel : ObservableObject
             nameof(EmitIntuneWin), nameof(VersionNote), nameof(CanBuild), nameof(HasFiles),
 
             // Signing lives on the project too, so a loaded project - or a
-            // recipe template - has to repaint the whole signing section.
+            // blueprint template - has to repaint the whole signing section.
             nameof(SignEnabled), nameof(SigningModeName), nameof(IsPfxMode), nameof(IsStoreMode),
             nameof(IsAzureMode), nameof(CertificatePath), nameof(PasswordEnvironmentVariable),
             nameof(Thumbprint), nameof(AzureEndpoint), nameof(AzureCodeSigningAccountName),

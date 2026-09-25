@@ -11,7 +11,7 @@ set -euo pipefail
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
-cli="dotnet run --project src/MsiMaker.Cli -c Release --no-build --"
+cli="dotnet run --project src/MsiMaker.App -c Release --no-build --"
 
 echo "=== what can this machine do? ==="
 $cli doctor

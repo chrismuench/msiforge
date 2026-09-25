@@ -180,6 +180,16 @@
       <Setter Property="Margin" Value="0,0,0,10" />
     </Style>
 
+    <!-- A category header inside the blueprint list; sits above the first row of
+         each group, tighter and quieter than a page eyebrow. -->
+    <Style Selector="TextBlock.grouphead">
+      <Setter Property="FontSize" Value="10.5" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="LetterSpacing" Value="0.7" />
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+      <Setter Property="Margin" Value="2,10,0,5" />
+    </Style>
+
     <!--
       The one line under every page title. Capped well short of the window so
       the eye has a line length it can actually track, and given room beneath
@@ -380,13 +390,19 @@
       <Setter Property="BorderBrush" Value="{DynamicResource PassLineBrush}" />
     </Style>
     <!--
-      A third weight for the banner: an untested recipe is not a failure, but it
+      A third weight for the banner: an untested blueprint is not a failure, but it
       must not read as an endorsement either, so it gets the warn palette rather
       than being demoted to a hint nobody reads.
     -->
     <Style Selector="Border.verdict.warn">
       <Setter Property="Background" Value="{DynamicResource WarnBackBrush}" />
       <Setter Property="BorderBrush" Value="{DynamicResource WarnLineBrush}" />
+    </Style>
+    <!-- Neutral, calm: for something that is a normal starting point, not a fault
+         (a vendor-documented blueprint that simply has not been run here). -->
+    <Style Selector="Border.verdict.info">
+      <Setter Property="Background" Value="{DynamicResource SunkenBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
     </Style>
     <Style Selector="TextBlock.verdicttext">
       <Setter Property="FontSize" Value="13.5" />
@@ -401,6 +417,9 @@
     <Style Selector="TextBlock.verdicttext.warn">
       <Setter Property="Foreground" Value="{DynamicResource WarnTextBrush}" />
     </Style>
+    <Style Selector="TextBlock.verdicttext.info">
+      <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+    </Style>
 
     <!-- The banner glyph takes the banner's own colour. -->
     <Style Selector="Border.verdict Path.icon">
@@ -414,10 +433,13 @@
     <Style Selector="Border.verdict.warn Path.icon">
       <Setter Property="Stroke" Value="{DynamicResource WarnTextBrush}" />
     </Style>
+    <Style Selector="Border.verdict.info Path.icon">
+      <Setter Property="Stroke" Value="{DynamicResource TextSecondaryBrush}" />
+    </Style>
 
     <!--
       Body prose, for the one place the window has a paragraph to say rather
-      than a label: a recipe's awkwardness. Wider measure than .hint and full
+      than a label: a blueprint's awkwardness. Wider measure than .hint and full
       text colour, because this is the reason the library exists.
     -->
     <Style Selector="TextBlock.prose">
@@ -464,7 +486,7 @@
       <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
       <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}" />
       <Setter Property="FontWeight" Value="SemiBold" />
-      <Setter Property="Padding" Value="16,7" />
+      <Setter Property="Padding" Value="20,9" />
     </Style>
     <Style Selector="Button.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource AccentHoverBrush}" />
@@ -721,26 +743,26 @@
 
     <!-- ============================================================= lists -->
 
-    <Style Selector="ListBox.recipes ListBoxItem">
+    <Style Selector="ListBox.blueprints ListBoxItem">
       <Setter Property="Padding" Value="10,7" />
       <Setter Property="MinHeight" Value="0" />
       <Setter Property="CornerRadius" Value="7" />
       <Setter Property="Margin" Value="0,1" />
     </Style>
-    <Style Selector="ListBox.recipes ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
+    <Style Selector="ListBox.blueprints ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Transitions">
         <Transitions>
           <BrushTransition Property="Background" Duration="0:0:0.12" />
         </Transitions>
       </Setter>
     </Style>
-    <Style Selector="ListBox.recipes ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Style Selector="ListBox.blueprints ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource SunkenBrush}" />
     </Style>
-    <Style Selector="ListBox.recipes ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+    <Style Selector="ListBox.blueprints ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
     </Style>
-    <Style Selector="ListBox.recipes ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Style Selector="ListBox.blueprints ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
     </Style>
 
