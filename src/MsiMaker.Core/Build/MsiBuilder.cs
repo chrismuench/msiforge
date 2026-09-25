@@ -52,6 +52,23 @@ public static class MsiBuilder
     /// </summary>
     private const string InstallFolderToken = "[INSTALLFOLDER]";
 
+    // Auto-remove intelligence: rather than guess a vendor's uninstaller path, snapshot
+    // the Programs registry before the vendor installer runs, find the entry it added
+    // after, and store that entry's own uninstall command; replay it on removal. Works
+    // for any installer that registers a normal ARP entry, whatever its uninstaller is
+    // called or wherever it lives. {PC} is the ProductCode, used as the store key.
+    private const string PsPrefix =
+        "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -Command ";
+
+    private const string BaselineScript = @"$ErrorActionPreference='SilentlyContinue'; $ks=@('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'); $b=@(); foreach($k in $ks){ if(Test-Path $k){ $b += (Get-ChildItem $k | ForEach-Object { $_.PSChildName }) } }; New-Item 'HKLM:\SOFTWARE\MsiMaker\Baseline' -Force | Out-Null; Set-ItemProperty 'HKLM:\SOFTWARE\MsiMaker\Baseline' -Name '{PC}' -Value ($b -join '|')";
+
+    private const string CaptureScript = @"$ErrorActionPreference='SilentlyContinue'; $base=@(); $bp=(Get-ItemProperty 'HKLM:\SOFTWARE\MsiMaker\Baseline' -Name '{PC}').'{PC}'; if($bp){ $base=$bp -split '\|' }; $ks=@('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'); $new=@(); foreach($k in $ks){ if(Test-Path $k){ $new += Get-ChildItem $k | Where-Object { $base -notcontains $_.PSChildName } | ForEach-Object { Get-ItemProperty $_.PSPath } } }; $m=$new | Where-Object { $_.UninstallString } | Select-Object -First 1; if($m){ $c=$m.QuietUninstallString; if(-not $c){ $u=$m.UninstallString; if($u -match 'unins\d+\.exe'){ $c=$u+' /VERYSILENT /NORESTART /SUPPRESSMSGBOXES' } else { $c=$u+' /S' } }; New-Item 'HKLM:\SOFTWARE\MsiMaker\Wrappers' -Force | Out-Null; Set-ItemProperty 'HKLM:\SOFTWARE\MsiMaker\Wrappers' -Name '{PC}' -Value $c }; Remove-ItemProperty 'HKLM:\SOFTWARE\MsiMaker\Baseline' -Name '{PC}' -ErrorAction SilentlyContinue";
+
+    private const string ReplayScript = @"$ErrorActionPreference='SilentlyContinue'; $c=(Get-ItemProperty 'HKLM:\SOFTWARE\MsiMaker\Wrappers' -Name '{PC}').'{PC}'; if($c){ Start-Process cmd.exe -ArgumentList '/c',$c -Wait -WindowStyle Hidden }; Remove-ItemProperty 'HKLM:\SOFTWARE\MsiMaker\Wrappers' -Name '{PC}' -ErrorAction SilentlyContinue";
+
+    private static string PsCommand(string script, string productCode) =>
+        PsPrefix + "\"" + script.Replace("{PC}", productCode, StringComparison.Ordinal) + "\"";
+
     /// <summary>
     /// msidbCustomActionTypeRollback. A rollback action runs only when the
     /// install fails, and must be scheduled immediately ahead of the deferred
@@ -232,11 +249,17 @@ public static class MsiBuilder
             r.When is RunWhen.Uninstall or RunWhen.Both
             || !string.IsNullOrWhiteSpace(r.RollbackCommand)
             || !string.IsNullOrWhiteSpace(r.RollbackArguments));
-        if (wrapsAnInstaller && !removesTheApp)
+
+        // When the wrapper has no uninstall of its own, capture the vendor's own
+        // registered uninstall string at install and replay it on removal (emitted
+        // below). Only when that is switched off do we fall back to warning that
+        // the app will be left behind.
+        bool autoRemoveWrappedApp = wrapsAnInstaller && !removesTheApp && project.AutoRemoveWrappedApp;
+        if (wrapsAnInstaller && !removesTheApp && !project.AutoRemoveWrappedApp)
             warnings.Add("This package installs a vendor application but has no uninstall "
                          + "command, so removing the MSI will take away the wrapper but leave the "
                          + "application installed. Add a run action with When=Uninstall that calls the "
-                         + "vendor's uninstaller (for example \"[INSTALLFOLDER]\\uninstall.exe\" /S).");
+                         + "vendor's uninstaller, or leave AutoRemoveWrappedApp on.");
 
         // A wrapped installer decides where it lands from its own command line, not
         // from the Install folder here. If the arguments name no directory, the
@@ -588,6 +611,19 @@ public static class MsiBuilder
         {
             var customAction = db.Std("CustomAction");
 
+            // Snapshot the Programs registry before the vendor installer runs, so the
+            // entry it adds can be told apart afterwards. Lowest install-time slot, so
+            // it is ahead of the install action the loop schedules next.
+            if (autoRemoveWrappedApp)
+            {
+                EnsureSystemDirectory();
+                string baselineId = UniqueId("ca_uninstall_baseline", identifiers);
+                customAction.Add(baselineId,
+                    CaExeInDirectory | CaDeferred | CaNoImpersonate | CaIgnoreReturn,
+                    systemDirId, PsCommand(BaselineScript, DeterministicGuid.Format(productCode)), null);
+                installSequence.Add(baselineId, "NOT REMOVE", afterInstallFiles.Take());
+            }
+
             foreach (var run in project.Run)
             {
                 // Two shapes: an executable this package installs (resolved
@@ -716,6 +752,28 @@ public static class MsiBuilder
                     customAction.Add(id, type, source, flow ? Resolve(target) : target, null);
                     installSequence.Add(id, uninstallCondition, slot);
                 }
+            }
+
+            // After the vendor installer has run: find the Programs entry it added and
+            // store its own uninstall command, then replay that on removal. Capture is
+            // the highest install-time slot (after the install action above); replay is
+            // an uninstall-time action, so it also runs when an upgrade removes this
+            // version, uninstalling the old app before the new one is laid down.
+            if (autoRemoveWrappedApp)
+            {
+                string pc = DeterministicGuid.Format(productCode);
+
+                string captureId = UniqueId("ca_uninstall_capture", identifiers);
+                customAction.Add(captureId,
+                    CaExeInDirectory | CaDeferred | CaNoImpersonate | CaIgnoreReturn,
+                    systemDirId, PsCommand(CaptureScript, pc), null);
+                installSequence.Add(captureId, "NOT REMOVE", afterInstallFiles.Take());
+
+                string replayId = UniqueId("ca_uninstall_replay", identifiers);
+                customAction.Add(replayId,
+                    CaExeInDirectory | CaDeferred | CaNoImpersonate | CaIgnoreReturn,
+                    systemDirId, PsCommand(ReplayScript, pc), null);
+                installSequence.Add(replayId, "REMOVE~=\"ALL\"", beforeRemoveFiles.Take());
             }
         }
 

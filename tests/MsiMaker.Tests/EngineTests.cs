@@ -247,6 +247,64 @@ public class EngineTests
     }
 
     [Fact]
+    public void WrappedInstallerGetsAutoUninstallCaptureAndReplay()
+    {
+        string dir = TempDir();
+        string exe = Path.Combine(dir, "vendor-setup.exe");
+        File.WriteAllText(exe, "stub");
+
+        var project = SampleProject(dir);
+        project.Files.Clear();
+        project.Files.Add(new PayloadFile { SourcePath = exe });
+        project.Run.Add(new RunAction
+        {
+            Id = "install", ExePath = "vendor-setup.exe", Arguments = "/S", When = RunWhen.Install,
+        });
+
+        string output = Path.Combine(dir, "auto.msi");
+        var result = MsiBuilder.Build(project, output);
+
+        // No "left behind" warning - auto-remove handles it.
+        Assert.DoesNotContain(result.Warnings, w => w.Contains("leave the application", StringComparison.Ordinal));
+
+        var db = MsiDatabase.Load(output);
+        var actions = db.Tables["CustomAction"].Rows.Select(r => (string)r[0]!).ToList();
+        Assert.Contains("ca_uninstall_baseline", actions);
+        Assert.Contains("ca_uninstall_capture", actions);
+        Assert.Contains("ca_uninstall_replay", actions);
+
+        // The replay is scheduled on removal; capture only on install.
+        var seq = db.Tables["InstallExecuteSequence"].Rows;
+        Assert.Contains(seq, r => (string?)r[0] == "ca_uninstall_replay" && ((string?)r[1])!.Contains("REMOVE"));
+        Assert.Contains(seq, r => (string?)r[0] == "ca_uninstall_capture" && (string?)r[1] == "NOT REMOVE");
+    }
+
+    [Fact]
+    public void AutoUninstallCanBeTurnedOff()
+    {
+        string dir = TempDir();
+        string exe = Path.Combine(dir, "vendor-setup.exe");
+        File.WriteAllText(exe, "stub");
+
+        var project = SampleProject(dir);
+        project.AutoRemoveWrappedApp = false;
+        project.Files.Clear();
+        project.Files.Add(new PayloadFile { SourcePath = exe });
+        project.Run.Add(new RunAction
+        {
+            Id = "install", ExePath = "vendor-setup.exe", Arguments = "/S", When = RunWhen.Install,
+        });
+
+        var result = MsiBuilder.Build(project, Path.Combine(dir, "off.msi"));
+
+        // Off, it falls back to warning that the app will be left behind.
+        Assert.Contains(result.Warnings, w => w.Contains("leave the application", StringComparison.Ordinal));
+        var db = MsiDatabase.Load(Path.Combine(dir, "off.msi"));
+        Assert.DoesNotContain(db.Tables["CustomAction"].Rows,
+            r => (string?)r[0] == "ca_uninstall_capture");
+    }
+
+    [Fact]
     public void SetupWizardIsOmittedWhenDisabled()
     {
         string dir = TempDir();

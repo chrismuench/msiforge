@@ -212,6 +212,16 @@ public sealed class MsiProject
     /// </summary>
     public bool ShowInstallWizard { get; set; } = true;
 
+    /// <summary>
+    /// For a package that wraps a vendor installer and has no uninstall command of
+    /// its own: at install, record the vendor's own registered uninstall string
+    /// (found by diffing the Programs registry around the install), and replay it
+    /// when the MSI is removed. This is what lets uninstalling the MSI actually
+    /// remove the application, without the packager knowing the vendor's uninstaller
+    /// path. On by default; turn it off to leave uninstall entirely to the vendor.
+    /// </summary>
+    public bool AutoRemoveWrappedApp { get; set; } = true;
+
     public List<PayloadFile> Files { get; set; } = [];
     public List<PayloadFolder> Folders { get; set; } = [];
     public List<RunAction> Run { get; set; } = [];
