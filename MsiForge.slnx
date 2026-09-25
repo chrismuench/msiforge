@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MsiForge.App/MsiForge.App.csproj" />
+    <Project Path="src/MsiForge.Cli/MsiForge.Cli.csproj" />
+    <Project Path="src/MsiForge.Core/MsiForge.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MsiForge.Tests/MsiForge.Tests.csproj" />
+  </Folder>
+</Solution>

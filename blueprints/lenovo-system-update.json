@@ -11,7 +11,7 @@
   "Verified": false,
   "Notes": [
     "NOT tested in this repository. The switches below are transcribed from Lenovo's deployment documentation and have not been run here.",
-    "/VERYSILENT /NORESTART is Inno Setup syntax. Run 'msimaker analyze <installer>' against your download to confirm the installer really is Inno Setup before trusting it - if the fingerprint says something else, the switches are wrong.",
+    "/VERYSILENT /NORESTART is Inno Setup syntax. Run 'msiforge analyze <installer>' against your download to confirm the installer really is Inno Setup before trusting it - if the fingerprint says something else, the switches are wrong.",
     "No uninstall action is wired up. An Inno Setup install leaves unins000.exe in its own install folder; find that path on a test device, then add a Run action with Command and When: Uninstall, something of the form \"<path>\\unins000.exe\" /VERYSILENT /NORESTART.",
     "System Update installs a service (SUService) and its own scheduled task. Removing the application without removing those leaves both behind, which is another reason to get the uninstall right rather than leaving it to the MSI.",
     "Set Version to the build you actually packaged."

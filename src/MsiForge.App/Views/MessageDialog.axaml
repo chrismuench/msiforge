@@ -1,0 +1,17 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MsiForge.App.Views.MessageDialog"
+        Title="MsiForge"
+        Width="520" SizeToContent="Height" MaxHeight="560"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource WindowBrush}">
+
+  <StackPanel Margin="24" Spacing="16">
+    <StackPanel Spacing="8">
+      <TextBlock Name="Heading" Classes="h1" FontSize="17" Margin="0" Text="" />
+      <TextBlock Name="Body" Classes="sub" Margin="0" TextWrapping="Wrap" Text="" />
+    </StackPanel>
+    <Button Name="CloseButton" Classes="primary" Content="OK" HorizontalAlignment="Right" />
+  </StackPanel>
+</Window>

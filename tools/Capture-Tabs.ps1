@@ -7,8 +7,8 @@
   from outside the process.
 #>
 param(
-    [string] $Exe = ".\dist\win-x64\MsiMaker.exe",
-    [string] $OutDir = "$env:TEMP\msimaker-ui",
+    [string] $Exe = ".\dist\win-x64\MsiForge.exe",
+    [string] $OutDir = "$env:TEMP\msiforge-ui",
     [int] $WaitSeconds = 25
 )
 
@@ -34,7 +34,7 @@ public class Ui {
 '@
 
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
-Get-Process -Name 'MsiMaker' -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-Process -Name 'MsiForge' -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Milliseconds 700
 
 $p = Start-Process -FilePath $Exe -PassThru

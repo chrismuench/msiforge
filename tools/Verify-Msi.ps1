@@ -2,7 +2,7 @@
 .SYNOPSIS
   Opens an MSI through Windows Installer itself (msi.dll) and dumps key tables.
 
-  MsiMaker writes MSIs with its own managed engine, so the authority on whether
+  MsiForge writes MSIs with its own managed engine, so the authority on whether
   the output is well formed is Windows Installer, not our own reader. This is the
   acceptance check for anything the engine emits.
 #>

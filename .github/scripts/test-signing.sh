@@ -11,7 +11,7 @@ set -euo pipefail
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
-cli="dotnet run --project src/MsiMaker.App -c Release --no-build --"
+cli="dotnet run --project src/MsiForge.App -c Release --no-build --"
 
 echo "=== what can this machine do? ==="
 $cli doctor
@@ -24,8 +24,8 @@ printf 'nested' > "$work/payload/sub/nested.txt"
 
 cat > "$work/project.json" <<JSON
 {
-  "ProductName": "MsiMaker Signing CI",
-  "Manufacturer": "MsiMaker",
+  "ProductName": "MsiForge Signing CI",
+  "Manufacturer": "MsiForge",
   "Version": "1.0.0",
   "UpgradeCode": "6c2b9f41-8d13-4e75-a0b6-3f1c7d8e2a95",
   "Platform": "X64",
@@ -33,7 +33,7 @@ cat > "$work/project.json" <<JSON
   "Signing": {
     "Enabled": true,
     "CertificatePath": "$work/ci.pfx",
-    "PasswordEnvironmentVariable": "MSIMAKER_CI_PFX_PASSWORD",
+    "PasswordEnvironmentVariable": "MSIFORGE_CI_PFX_PASSWORD",
     "TimestampUrl": "http://timestamp.digicert.com"
   }
 }
@@ -47,12 +47,12 @@ echo
 echo "=== a throwaway signing certificate ==="
 openssl req -x509 -newkey rsa:2048 -sha256 -days 2 -nodes \
     -keyout "$work/key.pem" -out "$work/cert.pem" \
-    -subj "/CN=MsiMaker CI Signing" \
+    -subj "/CN=MsiForge CI Signing" \
     -addext "keyUsage=digitalSignature" \
     -addext "extendedKeyUsage=codeSigning" 2>/dev/null
 openssl pkcs12 -export -out "$work/ci.pfx" \
     -inkey "$work/key.pem" -in "$work/cert.pem" \
-    -passout "pass:${MSIMAKER_CI_PFX_PASSWORD}"
+    -passout "pass:${MSIFORGE_CI_PFX_PASSWORD}"
 echo "pfx: $(wc -c < "$work/ci.pfx") bytes"
 echo
 

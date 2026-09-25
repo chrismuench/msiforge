@@ -1,0 +1,819 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="MsiForge.App.App"
+             RequestedThemeVariant="Default">
+
+  <!--
+    One palette, defined once per theme variant. Every brush below has a
+    counterpart in the other dictionary, so nothing goes invisible when the
+    machine is set to dark mode - which on a managed fleet is common.
+  -->
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="AppSurfaceBrush"    Color="#F1F2F5" />
+          <SolidColorBrush x:Key="ChromeBrush"        Color="#FFFFFF" />
+          <SolidColorBrush x:Key="CardBrush"          Color="#FFFFFF" />
+          <SolidColorBrush x:Key="SunkenBrush"        Color="#F6F7F9" />
+          <SolidColorBrush x:Key="BorderSubtleBrush"  Color="#E2E5EA" />
+          <SolidColorBrush x:Key="BorderStrongBrush"  Color="#C8CDD5" />
+          <SolidColorBrush x:Key="TextPrimaryBrush"   Color="#1A1D21" />
+          <SolidColorBrush x:Key="TextSecondaryBrush" Color="#586170" />
+          <SolidColorBrush x:Key="TextMutedBrush"     Color="#7B8492" />
+
+          <!--
+            The accent is a deep, slightly desaturated indigo rather than the
+            system blue: it still reads as tooling, it is far enough from the
+            green/amber/red of the status palette to never be mistaken for a
+            verdict, and at this depth white sits on it at better than 7:1.
+          -->
+          <SolidColorBrush x:Key="AccentBrush"        Color="#454A9E" />
+          <SolidColorBrush x:Key="AccentHoverBrush"   Color="#5156B4" />
+          <SolidColorBrush x:Key="AccentPressBrush"   Color="#373C85" />
+          <SolidColorBrush x:Key="AccentTextBrush"    Color="#FFFFFF" />
+          <!-- The quiet tint: selection, step marks, page glyphs. -->
+          <SolidColorBrush x:Key="AccentSoftBrush"    Color="#ECEDF8" />
+          <SolidColorBrush x:Key="AccentSoftLineBrush" Color="#CFD2EE" />
+          <SolidColorBrush x:Key="AccentTintTextBrush" Color="#3B4090" />
+
+          <SolidColorBrush x:Key="PassBackBrush"      Color="#E3F1E5" />
+          <SolidColorBrush x:Key="PassLineBrush"      Color="#A8CDAF" />
+          <SolidColorBrush x:Key="PassTextBrush"      Color="#1D6B2C" />
+          <SolidColorBrush x:Key="WarnBackBrush"      Color="#FBEED6" />
+          <SolidColorBrush x:Key="WarnLineBrush"      Color="#E0C287" />
+          <SolidColorBrush x:Key="WarnTextBrush"      Color="#8A5700" />
+          <SolidColorBrush x:Key="FailBackBrush"      Color="#FBE2E2" />
+          <SolidColorBrush x:Key="FailLineBrush"      Color="#E6AFAF" />
+          <SolidColorBrush x:Key="FailTextBrush"      Color="#A22121" />
+
+          <!--
+            Elevation is deliberately shallow. Two shadows - a tight contact
+            one and a wide soft one - read as a lifted sheet; a single large
+            blur reads as a drop shadow from 2008.
+          -->
+          <BoxShadows x:Key="CardShadow">0 1 2 0 #12101828, 0 6 16 -8 #1F101828</BoxShadows>
+          <BoxShadows x:Key="RaisedShadow">0 2 6 -1 #22101828</BoxShadows>
+        </ResourceDictionary>
+
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="AppSurfaceBrush"    Color="#14171B" />
+          <SolidColorBrush x:Key="ChromeBrush"        Color="#1A1E23" />
+          <SolidColorBrush x:Key="CardBrush"          Color="#1E232A" />
+          <SolidColorBrush x:Key="SunkenBrush"        Color="#171B20" />
+          <SolidColorBrush x:Key="BorderSubtleBrush"  Color="#2D333B" />
+          <SolidColorBrush x:Key="BorderStrongBrush"  Color="#3D454F" />
+          <SolidColorBrush x:Key="TextPrimaryBrush"   Color="#E7ECF2" />
+          <SolidColorBrush x:Key="TextSecondaryBrush" Color="#A4AFBC" />
+          <SolidColorBrush x:Key="TextMutedBrush"     Color="#8A95A3" />
+
+          <!-- The same hue lifted until it carries on a dark ground. -->
+          <SolidColorBrush x:Key="AccentBrush"        Color="#8E93E8" />
+          <SolidColorBrush x:Key="AccentHoverBrush"   Color="#A1A6F0" />
+          <SolidColorBrush x:Key="AccentPressBrush"   Color="#787DD4" />
+          <SolidColorBrush x:Key="AccentTextBrush"    Color="#101320" />
+          <SolidColorBrush x:Key="AccentSoftBrush"    Color="#23263C" />
+          <SolidColorBrush x:Key="AccentSoftLineBrush" Color="#393D62" />
+          <SolidColorBrush x:Key="AccentTintTextBrush" Color="#A6ABF2" />
+
+          <SolidColorBrush x:Key="PassBackBrush"      Color="#1B3624" />
+          <SolidColorBrush x:Key="PassLineBrush"      Color="#3C6B4A" />
+          <SolidColorBrush x:Key="PassTextBrush"      Color="#7ED894" />
+          <SolidColorBrush x:Key="WarnBackBrush"      Color="#3A2E14" />
+          <SolidColorBrush x:Key="WarnLineBrush"      Color="#6E5A2C" />
+          <SolidColorBrush x:Key="WarnTextBrush"      Color="#E9C06C" />
+          <SolidColorBrush x:Key="FailBackBrush"      Color="#3B1E1E" />
+          <SolidColorBrush x:Key="FailLineBrush"      Color="#703C3C" />
+          <SolidColorBrush x:Key="FailTextBrush"      Color="#F09A9A" />
+
+          <!-- Deeper and darker: on a dark ground a pale shadow reads as fog. -->
+          <BoxShadows x:Key="CardShadow">0 1 2 0 #59000000, 0 6 16 -8 #66000000</BoxShadows>
+          <BoxShadows x:Key="RaisedShadow">0 2 6 -1 #73000000</BoxShadows>
+        </ResourceDictionary>
+
+      </ResourceDictionary.ThemeDictionaries>
+
+      <!-- Spacing scale. Everything in the window is a multiple of 4. -->
+      <x:Double x:Key="SpaceXs">4</x:Double>
+      <x:Double x:Key="SpaceSm">8</x:Double>
+      <x:Double x:Key="SpaceMd">12</x:Double>
+      <x:Double x:Key="SpaceLg">16</x:Double>
+      <x:Double x:Key="SpaceXl">24</x:Double>
+
+      <Thickness x:Key="CardPadding">18</Thickness>
+      <!--
+        Tighter than it was: a step strip at the top and a wizard footer at the
+        bottom both cost height, and that has to come out of the page rather
+        than out of the window, which already only just fits a 768px laptop.
+      -->
+      <Thickness x:Key="PagePadding">24,18,24,18</Thickness>
+      <Thickness x:Key="ChromePadding">20,11</Thickness>
+
+      <!--
+        One measure for every column of prose in the window. Long lines at full
+        window width are the difference between a document and a data dump.
+      -->
+      <x:Double x:Key="PageMeasure">860</x:Double>
+
+      <FontFamily x:Key="MonoFont">Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,monospace</FontFamily>
+
+      <!--
+        ================================================================ icons
+
+        Every glyph is drawn by hand on a 16-unit grid and rendered at 16 device
+        units with no stretch, so the stroke weight and the optical size are the
+        same for all of them - which is the whole reason they are geometry here
+        rather than an icon font or a folder of downloaded SVGs. Content stays
+        inside 2.4 .. 13.6 so a round 1.35 stroke never touches the edge.
+      -->
+      <StreamGeometry x:Key="IconBook">M3.3 2.8 H12.7 V13.2 H3.3 Z M6.3 2.8 V13.2 M8.4 6.1 H10.9 M8.4 8.5 H10.9</StreamGeometry>
+      <StreamGeometry x:Key="IconPackage">M8 2.35 L13.65 5.3 V10.7 L8 13.65 L2.35 10.7 V5.3 Z M2.35 5.3 L8 8.25 L13.65 5.3 M8 8.25 V13.65</StreamGeometry>
+      <StreamGeometry x:Key="IconTag">M8.6 2.4 H13.6 V7.4 L7.6 13.4 L2.4 8.2 Z M11.05 4.95 L11.06 4.96</StreamGeometry>
+      <StreamGeometry x:Key="IconTerminal">M2.4 3.3 H13.6 V12.7 H2.4 Z M5 6.4 L7 8.2 L5 10 M8.6 10 H11.4</StreamGeometry>
+      <StreamGeometry x:Key="IconCheckCircle">M8 2.4 A5.6 5.6 0 0 1 8 13.6 A5.6 5.6 0 0 1 8 2.4 M5.35 8.1 L7.2 9.95 L10.7 6.2</StreamGeometry>
+      <StreamGeometry x:Key="IconBuild">M8 2.6 V9.9 M5.4 7.3 L8 9.9 L10.6 7.3 M2.8 10.9 V13.3 H13.2 V10.9</StreamGeometry>
+      <StreamGeometry x:Key="IconFolder">M2.4 12.8 V3.8 H6.3 L7.8 5.6 H13.6 V12.8 Z</StreamGeometry>
+      <StreamGeometry x:Key="IconSave">M3.1 3.2 H10.9 L12.9 5.2 V12.8 H3.1 Z M5.6 3.2 V6.6 H10.4 V3.2 M5.1 12.8 V9.3 H10.9 V12.8</StreamGeometry>
+      <StreamGeometry x:Key="IconPlus">M8 3.4 V12.6 M3.4 8 H12.6</StreamGeometry>
+      <StreamGeometry x:Key="IconTrash">M2.9 4.6 H13.1 M6.4 4.6 V3 H9.6 V4.6 M4.5 4.6 L5.15 13.1 H10.85 L11.5 4.6 M6.8 6.9 V10.9 M9.2 6.9 V10.9</StreamGeometry>
+      <StreamGeometry x:Key="IconSearch">M7.3 2.7 A4.55 4.55 0 0 1 7.3 11.8 A4.55 4.55 0 0 1 7.3 2.7 M10.65 10.65 L13.5 13.5</StreamGeometry>
+      <StreamGeometry x:Key="IconExternal">M9.3 2.9 H13.1 V6.7 M13.1 2.9 L8.1 7.9 M11.2 9.4 V13.1 H2.9 V4.8 H6.6</StreamGeometry>
+      <StreamGeometry x:Key="IconArrowRight">M3 8 H12.4 M8.9 4.5 L12.4 8 L8.9 11.5</StreamGeometry>
+      <StreamGeometry x:Key="IconArrowLeft">M13 8 H3.6 M7.1 4.5 L3.6 8 L7.1 11.5</StreamGeometry>
+      <StreamGeometry x:Key="IconCompare">M2.5 3.5 H6 V12.5 H2.5 Z M10 3.5 H13.5 V12.5 H10 Z M6.8 8 H9.4 M8.3 6.9 L9.4 8 L8.3 9.1</StreamGeometry>
+      <StreamGeometry x:Key="IconCheck">M3.2 8.4 L6.4 11.6 L12.8 4.8</StreamGeometry>
+      <StreamGeometry x:Key="IconAlert">M8 2.9 L14.2 13.1 H1.8 Z M8 6.5 V9.5 M8 11.3 L8.01 11.31</StreamGeometry>
+      <StreamGeometry x:Key="IconShield">M8 2.4 L13.1 4.3 V8.1 C13.1 10.9 10.9 12.9 8 13.6 C5.1 12.9 2.9 10.9 2.9 8.1 V4.3 Z</StreamGeometry>
+
+      <!-- Drawn on a 12-unit grid: this one only ever sits inside a step mark. -->
+      <StreamGeometry x:Key="IconTickSmall">M2.7 6.4 L4.9 8.6 L9.3 3.4</StreamGeometry>
+    </ResourceDictionary>
+  </Application.Resources>
+
+  <Application.Styles>
+    <FluentTheme />
+    <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
+
+    <!-- ====================================================== typography -->
+
+    <Style Selector="TextBlock.h1">
+      <Setter Property="FontSize" Value="20" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+      <Setter Property="Margin" Value="0,0,0,4" />
+    </Style>
+
+    <Style Selector="TextBlock.h2">
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+      <Setter Property="Margin" Value="0,0,0,8" />
+    </Style>
+
+    <!-- Small caps-ish section marker for card headers. -->
+    <Style Selector="TextBlock.eyebrow">
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="LetterSpacing" Value="0.8" />
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+      <Setter Property="Margin" Value="0,0,0,10" />
+    </Style>
+
+    <!-- A category header inside the blueprint list; sits above the first row of
+         each group, tighter and quieter than a page eyebrow. -->
+    <Style Selector="TextBlock.grouphead">
+      <Setter Property="FontSize" Value="10.5" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="LetterSpacing" Value="0.7" />
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+      <Setter Property="Margin" Value="2,10,0,5" />
+    </Style>
+
+    <!--
+      The one line under every page title. Capped well short of the window so
+      the eye has a line length it can actually track, and given room beneath
+      it so the page has a beginning rather than starting straight into a form.
+    -->
+    <Style Selector="TextBlock.sub">
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="LineHeight" Value="19" />
+      <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="MaxWidth" Value="700" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="Margin" Value="0,10,0,20" />
+    </Style>
+
+    <Style Selector="TextBlock.label">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+      <Setter Property="Margin" Value="0,0,0,3" />
+    </Style>
+
+    <!--
+      The hints carry the MSI and Intune rules that are expensive to learn the
+      hard way. Most of them now live behind an info affordance rather than
+      permanently on screen - see Button.info - but the style is unchanged for
+      the few that stay out, and for the flyouts themselves.
+    -->
+    <Style Selector="TextBlock.hint">
+      <Setter Property="FontSize" Value="11.5" />
+      <Setter Property="LineHeight" Value="16" />
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="Margin" Value="0,4,0,0" />
+    </Style>
+
+    <Style Selector="TextBlock.mono">
+      <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+      <Setter Property="FontSize" Value="11.5" />
+      <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <Style Selector="TextBlock.empty">
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="TextAlignment" Value="Center" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="MaxWidth" Value="420" />
+    </Style>
+
+    <!-- ========================================================== surfaces -->
+
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="{DynamicResource CardPadding}" />
+      <Setter Property="Margin" Value="0,0,0,18" />
+      <Setter Property="BoxShadow" Value="{DynamicResource CardShadow}" />
+    </Style>
+
+    <!-- A card nested inside a card, so it must read as recessed, not raised. -->
+    <Style Selector="Border.inner">
+      <Setter Property="Background" Value="{DynamicResource SunkenBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="13" />
+      <Setter Property="Margin" Value="0" />
+    </Style>
+
+    <Style Selector="Border.empty">
+      <Setter Property="Background" Value="{DynamicResource SunkenBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="24" />
+    </Style>
+
+    <!-- The accent-tinted tile that opens every step. -->
+    <Style Selector="Border.pageicon">
+      <Setter Property="Width" Value="30" />
+      <Setter Property="Height" Value="30" />
+      <Setter Property="CornerRadius" Value="9" />
+      <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentSoftLineBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.pageicon Path.icon">
+      <Setter Property="Stroke" Value="{DynamicResource AccentTintTextBrush}" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <Style Selector="Separator">
+      <Setter Property="Background" Value="{DynamicResource BorderSubtleBrush}" />
+      <Setter Property="Height" Value="1" />
+      <Setter Property="Margin" Value="0,12" />
+    </Style>
+
+    <!-- ============================================================= icons -->
+
+    <Style Selector="Path.icon">
+      <Setter Property="Width" Value="16" />
+      <Setter Property="Height" Value="16" />
+      <Setter Property="Stretch" Value="None" />
+      <Setter Property="Stroke" Value="{DynamicResource TextSecondaryBrush}" />
+      <Setter Property="StrokeThickness" Value="1.35" />
+      <Setter Property="StrokeLineCap" Value="Round" />
+      <Setter Property="StrokeJoin" Value="Round" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Transitions">
+        <Transitions>
+          <BrushTransition Property="Stroke" Duration="0:0:0.13" />
+        </Transitions>
+      </Setter>
+    </Style>
+
+    <!--
+      Empty-state marks are the same geometry blown up in a Viewbox, so the
+      shapes stay identical to the ones in the strip and the buttons. The
+      thinner stroke is what keeps a 38px mark decorative rather than shouty.
+    -->
+    <Style Selector="Path.mark">
+      <Setter Property="StrokeThickness" Value="0.85" />
+      <Setter Property="Stroke" Value="{DynamicResource BorderStrongBrush}" />
+    </Style>
+    <Style Selector="Viewbox.mark">
+      <Setter Property="Width" Value="38" />
+      <Setter Property="Height" Value="38" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="Margin" Value="0,0,0,10" />
+    </Style>
+
+    <!-- ============================================================ status -->
+
+    <!--
+      Fully rounded, bordered and letter-spaced. A verdict that can cost a fleet
+      an afternoon should not look like a coloured word.
+    -->
+    <Style Selector="Border.pill">
+      <Setter Property="CornerRadius" Value="999" />
+      <Setter Property="Padding" Value="9,2" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Background" Value="{DynamicResource SunkenBrush}" />
+    </Style>
+    <Style Selector="Border.pill.pass">
+      <Setter Property="Background" Value="{DynamicResource PassBackBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource PassLineBrush}" />
+    </Style>
+    <Style Selector="Border.pill.warn">
+      <Setter Property="Background" Value="{DynamicResource WarnBackBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource WarnLineBrush}" />
+    </Style>
+    <Style Selector="Border.pill.fail">
+      <Setter Property="Background" Value="{DynamicResource FailBackBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource FailLineBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.pilltext">
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="LetterSpacing" Value="0.6" />
+      <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.pilltext.pass">
+      <Setter Property="Foreground" Value="{DynamicResource PassTextBrush}" />
+    </Style>
+    <Style Selector="TextBlock.pilltext.warn">
+      <Setter Property="Foreground" Value="{DynamicResource WarnTextBrush}" />
+    </Style>
+    <Style Selector="TextBlock.pilltext.fail">
+      <Setter Property="Foreground" Value="{DynamicResource FailTextBrush}" />
+    </Style>
+
+    <!--
+      Verdict banner: same semantics, more weight, full width. The heavier rule
+      down the left edge is what makes it read as a called-out statement rather
+      than as another tinted box.
+    -->
+    <Style Selector="Border.verdict">
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="14,12" />
+      <Setter Property="BorderThickness" Value="3,1,1,1" />
+      <Setter Property="Background" Value="{DynamicResource FailBackBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource FailLineBrush}" />
+    </Style>
+    <Style Selector="Border.verdict.pass">
+      <Setter Property="Background" Value="{DynamicResource PassBackBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource PassLineBrush}" />
+    </Style>
+    <!--
+      A third weight for the banner: an untested blueprint is not a failure, but it
+      must not read as an endorsement either, so it gets the warn palette rather
+      than being demoted to a hint nobody reads.
+    -->
+    <Style Selector="Border.verdict.warn">
+      <Setter Property="Background" Value="{DynamicResource WarnBackBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource WarnLineBrush}" />
+    </Style>
+    <!-- Neutral, calm: for something that is a normal starting point, not a fault
+         (a vendor-documented blueprint that simply has not been run here). -->
+    <Style Selector="Border.verdict.info">
+      <Setter Property="Background" Value="{DynamicResource SunkenBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+    </Style>
+    <Style Selector="TextBlock.verdicttext">
+      <Setter Property="FontSize" Value="13.5" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="LineHeight" Value="19" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="Foreground" Value="{DynamicResource FailTextBrush}" />
+    </Style>
+    <Style Selector="TextBlock.verdicttext.pass">
+      <Setter Property="Foreground" Value="{DynamicResource PassTextBrush}" />
+    </Style>
+    <Style Selector="TextBlock.verdicttext.warn">
+      <Setter Property="Foreground" Value="{DynamicResource WarnTextBrush}" />
+    </Style>
+    <Style Selector="TextBlock.verdicttext.info">
+      <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+    </Style>
+
+    <!-- The banner glyph takes the banner's own colour. -->
+    <Style Selector="Border.verdict Path.icon">
+      <Setter Property="Stroke" Value="{DynamicResource FailTextBrush}" />
+      <Setter Property="VerticalAlignment" Value="Top" />
+      <Setter Property="Margin" Value="0,1,0,0" />
+    </Style>
+    <Style Selector="Border.verdict.pass Path.icon">
+      <Setter Property="Stroke" Value="{DynamicResource PassTextBrush}" />
+    </Style>
+    <Style Selector="Border.verdict.warn Path.icon">
+      <Setter Property="Stroke" Value="{DynamicResource WarnTextBrush}" />
+    </Style>
+    <Style Selector="Border.verdict.info Path.icon">
+      <Setter Property="Stroke" Value="{DynamicResource TextSecondaryBrush}" />
+    </Style>
+
+    <!--
+      Body prose, for the one place the window has a paragraph to say rather
+      than a label: a blueprint's awkwardness. Wider measure than .hint and full
+      text colour, because this is the reason the library exists.
+    -->
+    <Style Selector="TextBlock.prose">
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="LineHeight" Value="19" />
+      <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="MaxWidth" Value="640" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+
+    <!-- =========================================================== buttons -->
+
+    <Style Selector="Button">
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="13,6" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    </Style>
+    <Style Selector="Button /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Transitions">
+        <Transitions>
+          <BrushTransition Property="Background" Duration="0:0:0.12" />
+          <BrushTransition Property="BorderBrush" Duration="0:0:0.12" />
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource SunkenBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    </Style>
+    <Style Selector="Button:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource BorderSubtleBrush}" />
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    </Style>
+
+    <!-- The one action the whole window exists for. -->
+    <Style Selector="Button.primary">
+      <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Padding" Value="20,9" />
+    </Style>
+    <Style Selector="Button.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource AccentHoverBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentHoverBrush}" />
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource AccentTextBrush}" />
+    </Style>
+    <Style Selector="Button.primary:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource AccentPressBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentPressBrush}" />
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource AccentTextBrush}" />
+    </Style>
+    <Style Selector="Button.primary:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource BorderSubtleBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource TextMutedBrush}" />
+    </Style>
+
+    <!-- Secondary affordances that should not compete with the row's default. -->
+    <Style Selector="Button.quiet">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+    </Style>
+    <Style Selector="Button.quiet:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource SunkenBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    </Style>
+
+    <!-- Icons take the colour of the button they sit in, including its states. -->
+    <Style Selector="Button Path.icon">
+      <Setter Property="Stroke" Value="{DynamicResource TextSecondaryBrush}" />
+    </Style>
+    <Style Selector="Button:pointerover Path.icon">
+      <Setter Property="Stroke" Value="{DynamicResource TextPrimaryBrush}" />
+    </Style>
+    <Style Selector="Button.primary Path.icon">
+      <Setter Property="Stroke" Value="{DynamicResource AccentTextBrush}" />
+    </Style>
+    <Style Selector="Button.primary:pointerover Path.icon">
+      <Setter Property="Stroke" Value="{DynamicResource AccentTextBrush}" />
+    </Style>
+    <Style Selector="Button:disabled Path.icon">
+      <Setter Property="Stroke" Value="{DynamicResource TextMutedBrush}" />
+    </Style>
+
+    <!--
+      ================================================ progressive disclosure
+
+      Every Intune and MSI rule this window knows used to sit permanently under
+      its field, three or four lines at a time, which is why the thing read as a
+      configuration file rendered as UI. The text is unchanged and none of it is
+      gone: it now lives one click away behind this 16px marker, which sits on
+      the label's own baseline and costs no vertical space at all.
+    -->
+    <Style Selector="Button.info">
+      <Setter Property="Content" Value="i" />
+      <Setter Property="Width" Value="16" />
+      <Setter Property="Height" Value="16" />
+      <Setter Property="MinWidth" Value="16" />
+      <Setter Property="MinHeight" Value="16" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="999" />
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="ToolTip.Tip" Value="Why this matters" />
+    </Style>
+    <Style Selector="Button.info:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource AccentTintTextBrush}" />
+    </Style>
+    <Style Selector="Button.info:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource AccentTintTextBrush}" />
+    </Style>
+
+    <Style Selector="FlyoutPresenter">
+      <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="15,13" />
+      <Setter Property="MaxWidth" Value="400" />
+    </Style>
+
+    <!-- The hint text itself, once it is inside a flyout. -->
+    <Style Selector="TextBlock.disclosure">
+      <Setter Property="FontSize" Value="12.5" />
+      <Setter Property="LineHeight" Value="18" />
+      <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="MaxWidth" Value="360" />
+    </Style>
+
+    <!-- ============================================================ inputs -->
+
+    <Style Selector="TextBox">
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="9,6" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="MinHeight" Value="32" />
+    </Style>
+    <Style Selector="TextBox.mono">
+      <Setter Property="FontFamily" Value="{DynamicResource MonoFont}" />
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="ComboBox">
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="MinHeight" Value="32" />
+      <Setter Property="FontSize" Value="13" />
+    </Style>
+    <Style Selector="CheckBox">
+      <Setter Property="FontSize" Value="13" />
+    </Style>
+
+    <Style Selector="Expander">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="FontSize" Value="12.5" />
+    </Style>
+
+    <!-- ====================================================== step indicator -->
+    <!--
+      The wizard's spine. It replaces the tab strip: same job, but it says which
+      steps are behind you, which one you are on and which are still ahead, and
+      it marks the two that can simply be skipped. Every step stays clickable -
+      somebody who has done this fifty times goes straight to Build.
+    -->
+    <Style Selector="ListBox.steps">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="ListBox.steps ListBoxItem">
+      <Setter Property="Padding" Value="8,5" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="CornerRadius" Value="7" />
+      <Setter Property="Margin" Value="0,0,2,0" />
+    </Style>
+    <Style Selector="ListBox.steps ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Transitions">
+        <Transitions>
+          <BrushTransition Property="Background" Duration="0:0:0.12" />
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="ListBox.steps ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ListBox.steps ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource SunkenBrush}" />
+    </Style>
+    <Style Selector="ListBox.steps ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource SunkenBrush}" />
+    </Style>
+
+    <Style Selector="Border.stepmark">
+      <Setter Property="Width" Value="21" />
+      <Setter Property="Height" Value="21" />
+      <Setter Property="CornerRadius" Value="999" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Transitions">
+        <Transitions>
+          <BrushTransition Property="Background" Duration="0:0:0.15" />
+          <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="Border.stepmark.done">
+      <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentSoftLineBrush}" />
+    </Style>
+    <!-- Declared last so that being here beats having been here. -->
+    <Style Selector="Border.stepmark.current">
+      <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.stepnum">
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.stepmark.current TextBlock.stepnum">
+      <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}" />
+    </Style>
+
+    <Style Selector="Path.tick">
+      <Setter Property="Width" Value="12" />
+      <Setter Property="Height" Value="12" />
+      <Setter Property="Stretch" Value="None" />
+      <Setter Property="StrokeThickness" Value="1.7" />
+      <Setter Property="StrokeLineCap" Value="Round" />
+      <Setter Property="StrokeJoin" Value="Round" />
+      <Setter Property="Stroke" Value="{DynamicResource AccentTintTextBrush}" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.stepmark.current Path.tick">
+      <Setter Property="Stroke" Value="{DynamicResource AccentTextBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.steplabel">
+      <Setter Property="FontSize" Value="12.5" />
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.steplabel.done">
+      <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+    </Style>
+    <Style Selector="TextBlock.steplabel.current">
+      <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <!-- Says "you may walk past me" without saying "you are stuck". -->
+    <Style Selector="TextBlock.stepopt">
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="LetterSpacing" Value="0.4" />
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Margin" Value="-3,1,0,0" />
+    </Style>
+
+    <Style Selector="TextBlock.steppos">
+      <Setter Property="FontSize" Value="11.5" />
+      <Setter Property="LetterSpacing" Value="0.4" />
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- The reason Next is off. Grey alone tells nobody anything. -->
+    <Style Selector="TextBlock.blocked">
+      <Setter Property="FontSize" Value="11.5" />
+      <Setter Property="Foreground" Value="{DynamicResource WarnTextBrush}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+      <Setter Property="MaxWidth" Value="300" />
+    </Style>
+
+    <!-- ============================================================= lists -->
+
+    <Style Selector="ListBox.blueprints ListBoxItem">
+      <Setter Property="Padding" Value="10,7" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="CornerRadius" Value="7" />
+      <Setter Property="Margin" Value="0,1" />
+    </Style>
+    <Style Selector="ListBox.blueprints ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Transitions">
+        <Transitions>
+          <BrushTransition Property="Background" Duration="0:0:0.12" />
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="ListBox.blueprints ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource SunkenBrush}" />
+    </Style>
+    <Style Selector="ListBox.blueprints ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+    </Style>
+    <Style Selector="ListBox.blueprints ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+    </Style>
+
+    <!-- ============================================================== tabs -->
+    <!--
+      The TabControl is still what switches pages - selection, keyboard and
+      content hosting all work exactly as they did - but its own strip is folded
+      away, because the step indicator above the window is now the thing that
+      says where you are. Hidden rather than removed: the presenter is what
+      realises the pages.
+    -->
+    <Style Selector="TabControl">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Template">
+        <ControlTemplate TargetType="TabControl">
+          <DockPanel>
+            <Border DockPanel.Dock="Top" IsVisible="False" Height="0">
+              <ItemsPresenter Name="PART_ItemsPresenter"
+                              ItemsPanel="{TemplateBinding ItemsPanel}" />
+            </Border>
+            <ContentPresenter Name="PART_SelectedContentHost"
+                              Content="{TemplateBinding SelectedContent}"
+                              ContentTemplate="{TemplateBinding SelectedContentTemplate}"
+                              Margin="{TemplateBinding Padding}" />
+          </DockPanel>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+
+    <!-- ========================================================== datagrid -->
+
+    <Style Selector="DataGrid">
+      <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="GridLinesVisibility" Value="Horizontal" />
+      <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource BorderSubtleBrush}" />
+      <Setter Property="RowBackground" Value="Transparent" />
+      <Setter Property="FontSize" Value="12.5" />
+      <Setter Property="RowHeight" Value="32" />
+    </Style>
+    <Style Selector="DataGridColumnHeader">
+      <Setter Property="Background" Value="{DynamicResource SunkenBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+      <Setter Property="FontSize" Value="10.5" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="MinHeight" Value="30" />
+      <Setter Property="SeparatorBrush" Value="{DynamicResource BorderSubtleBrush}" />
+    </Style>
+
+  </Application.Styles>
+</Application>

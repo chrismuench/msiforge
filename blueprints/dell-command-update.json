@@ -11,7 +11,7 @@
   "Verified": false,
   "Notes": [
     "NOT tested in this repository. The switches below are transcribed from Dell's documentation, which is usually right and occasionally a release out of date.",
-    "Run 'msimaker analyze <installer>' against your actual download first: the fingerprint confirms the installer family, and so the switches.",
+    "Run 'msiforge analyze <installer>' against your actual download first: the fingerprint confirms the installer family, and so the switches.",
     "Dell documents /s for a silent install and a /l=<file> logging switch. Neither has been run here. Try them by hand on one device before deploying.",
     "No uninstall action is wired up, deliberately. Dell Command | Update registers its own entry in Programs and Features and this package cannot guess the uninstall string; read it out of the registry on a test device, then add a Run action with Command and When: Uninstall.",
     "What you probably want next is a scheduled task running dcu-cli.exe, which lives under Program Files\\Dell\\CommandUpdate. Its switches changed between DCU 4 and DCU 5, so check the Dell Command | Update reference guide for the version you deployed rather than copying a command from a blog. A scheduled task in this project cannot reference dcu-cli.exe anyway: a task's executable must be part of the payload."

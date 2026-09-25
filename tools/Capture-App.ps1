@@ -10,8 +10,8 @@
   happens to be on the desktop.
 #>
 param(
-    [string] $Exe = ".\dist\win-x64\MsiMaker.exe",
-    [string] $OutDir = "$env:TEMP\msimaker-ui",
+    [string] $Exe = ".\dist\win-x64\MsiForge.exe",
+    [string] $OutDir = "$env:TEMP\msiforge-ui",
     [string[]] $Arguments = @(),
     [int[]] $StepX = @(),
     [int] $StepY = 104,
@@ -36,7 +36,7 @@ public class AppShot {
 
     public const uint RenderFullContent = 0x00000002;
 
-    // Process.MainWindowHandle is not reliable here. MsiMaker is a console-subsystem
+    // Process.MainWindowHandle is not reliable here. MsiForge is a console-subsystem
     // binary that frees its console before opening the window, and the handle then
     // resolves to a hidden 0x0 message-only window - PrintWindow "succeeds" against
     // it and writes nothing. Pick the largest visible top-level window the process

@@ -10,7 +10,7 @@
   "Verified": false,
   "Notes": [
     "NOT tested in this repository. The switches are standard Inno Setup and transcribed from documentation, not verified here.",
-    "Run 'msimaker analyze <installer>' against your download; the Inno Setup fingerprint is unambiguous when it is there.",
+    "Run 'msiforge analyze <installer>' against your download; the Inno Setup fingerprint is unambiguous when it is there.",
     "To pin the component and option choices: run the installer interactively once with /SAVEINF=\"C:\\git.inf\", add that inf to the payload as a second file, and append /LOADINF=\"[INSTALLFOLDER]git.inf\" to the arguments. This has not been tested here, so try it on one device first.",
     "No uninstall action is wired up. Inno Setup leaves unins000.exe in its install folder - usually C:\\Program Files\\Git - so once you have confirmed the path on a test device, add a Run action with Command and When: Uninstall of the form \"C:\\Program Files\\Git\\unins000.exe\" /VERYSILENT /NORESTART.",
     "/SP- suppresses the \"this will install...\" prompt and /SUPPRESSMSGBOXES answers the rest; without both, a silent install can still stop on a dialogue no one is there to see.",

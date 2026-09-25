@@ -6,8 +6,8 @@
   "Category": "Device & driver tools",
   "Awkwardness": "HP's own Intune guidance wraps hpia.exe in an Install.cmd and detects on \"the file HPImageAssistant.exe exists\". That rule can never go from true to false, so once a device has any version of HPIA it looks compliant forever and a newer HPIA is never deployed. The underlying problem is that a SoftPaq extracts rather than installs: nothing is registered, there is no entry in Programs and Features, no version for Intune to compare, and the documented uninstall is a recursive delete. Shipping the extracted files as an MSI instead gives Intune a ProductCode and a version to work with, and gives the device a genuine uninstall.",
   "DownloadUrl": "https://ftp.hp.com/pub/caps-softpaq/cmit/HPIA.html",
-  "DownloadNotes": "Download the HP Image Assistant SoftPaq (spNNNNNN.exe) and hand it to MsiMaker as-is. MsiMaker runs the SoftPaq's own extractor (-s -e -f) to unpack it before packaging - extract only, so nothing is installed on this machine. You no longer have to extract it by hand first.",
-  "SetupFileHint": "The HP Image Assistant SoftPaq you downloaded (spNNNNNN.exe, around 30 MB). MsiMaker extracts it to a folder of ~136 files (HPImageAssistant.exe with its Lib and Redist subfolders) and packages that.",
+  "DownloadNotes": "Download the HP Image Assistant SoftPaq (spNNNNNN.exe) and hand it to MsiForge as-is. MsiForge runs the SoftPaq's own extractor (-s -e -f) to unpack it before packaging - extract only, so nothing is installed on this machine. You no longer have to extract it by hand first.",
+  "SetupFileHint": "The HP Image Assistant SoftPaq you downloaded (spNNNNNN.exe, around 30 MB). MsiForge extracts it to a folder of ~136 files (HPImageAssistant.exe with its Lib and Redist subfolders) and packages that.",
   "Extract": {
     "Switches": "-s -e -f\"{dest}\"",
     "MarkerFile": "HPImageAssistant.exe"

@@ -1,0 +1,61 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MsiForge.App.Views"
+        x:Class="MsiForge.App.Views.DeploymentDialog"
+        x:CompileBindings="True"
+        Title="Package ready"
+        Width="620" SizeToContent="Height" MaxHeight="720"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource WindowBrush}">
+
+  <DockPanel Margin="24">
+
+    <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,14">
+      <TextBlock Name="Heading" Classes="h1" FontSize="18" Margin="0"
+                 Text="Your package is ready" />
+      <TextBlock Name="SubText" Classes="sub" Margin="0" TextWrapping="Wrap"
+                 Text="Deploy it with these commands. Anyone can run it with HELP=1 to see the same options." />
+    </StackPanel>
+
+    <!-- Buttons pinned to the bottom, the command list scrolls between. -->
+    <Grid DockPanel.Dock="Bottom" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,16,0,0">
+      <Button Grid.Column="0" Name="ShowFolderButton" Classes="quiet" Content="Show in folder" />
+      <Button Grid.Column="2" Name="CopyButton" Classes="quiet" Content="Copy all" />
+      <Button Grid.Column="3" Name="CloseButton" Classes="primary" Content="Close" Margin="10,0,0,0" />
+    </Grid>
+
+    <TextBlock Name="ParametersText" DockPanel.Dock="Bottom" Classes="disclosure"
+               Margin="0,14,0,0" TextWrapping="Wrap" IsVisible="False"
+               FontFamily="{DynamicResource MonoFont}" />
+
+    <!--
+      One card per command: the label people scan for, and the command in its own
+      box with its own Copy button. Nothing runs off to the side, and each action
+      is a separate, self-contained thing to read and lift.
+    -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+      <ItemsControl Name="CommandList">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:DeployCommand">
+            <Border Classes="inner" Margin="0,0,0,8" Padding="12,10">
+              <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding Label}"
+                           FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"
+                           VerticalAlignment="Center" />
+                <Button Grid.Row="0" Grid.Column="1" Grid.RowSpan="2" Classes="quiet"
+                        Content="Copy" VerticalAlignment="Center" Margin="10,0,0,0"
+                        Click="OnCopyOne" Tag="{Binding Command}" />
+                <SelectableTextBlock Grid.Row="1" Grid.Column="0" Text="{Binding Command}"
+                                     FontFamily="{DynamicResource MonoFont}" FontSize="12"
+                                     TextWrapping="Wrap" Margin="0,4,0,0"
+                                     Foreground="{DynamicResource TextSecondaryBrush}" />
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+
+  </DockPanel>
+</Window>

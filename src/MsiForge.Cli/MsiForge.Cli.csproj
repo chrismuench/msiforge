@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- A library, not an executable. The commands are reached through the single
+         MsiForge binary, which is both the window and the command line, so there
+         is one thing to download and no way to run a stale copy of half of it. -->
+    <OutputType>Library</OutputType>
+    <AssemblyName>MsiForge.Cli</AssemblyName>
+    <RootNamespace>MsiForge.Cli</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup><ProjectReference Include="../MsiForge.Core/MsiForge.Core.csproj" /></ItemGroup>
+</Project>

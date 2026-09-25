@@ -1,0 +1,25 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MsiForge.App.Views.SaveChangesDialog"
+        Title="Start over?"
+        Width="440" SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource WindowBrush}">
+
+  <StackPanel Margin="24" Spacing="16">
+
+    <StackPanel Spacing="6">
+      <TextBlock Classes="h1" FontSize="17" Margin="0" Text="Start a new package?" />
+      <TextBlock Classes="sub" Margin="0" TextWrapping="Wrap"
+                 Text="The current package has unsaved changes. Save it before clearing the canvas?" />
+    </StackPanel>
+
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+      <Button Name="CancelButton" Classes="quiet" Content="Cancel" />
+      <Button Name="DiscardButton" Classes="quiet" Content="Don't save" />
+      <Button Name="SaveButton" Classes="primary" Content="Save…" />
+    </StackPanel>
+
+  </StackPanel>
+</Window>

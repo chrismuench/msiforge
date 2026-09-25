@@ -12,10 +12,10 @@ $ErrorActionPreference = 'Stop'
 # RUNNER_TEMP only exists on a GitHub runner; fall back so the script can be
 # run locally, which is the only way to know it works before pushing it.
 $base = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { $env:TEMP }
-$work = Join-Path $base 'msimaker-ci'
+$work = Join-Path $base 'msiforge-ci'
 New-Item -ItemType Directory -Force -Path $work | Out-Null
 
-$cli = Join-Path $PWD 'src\MsiMaker.App\bin\Release\net10.0\MsiMaker.exe'
+$cli = Join-Path $PWD 'src\MsiForge.App\bin\Release\net10.0\MsiForge.exe'
 if (-not (Test-Path $cli)) { throw "CLI not found at $cli" }
 
 function Invoke-Msi {
@@ -41,20 +41,20 @@ Set-Content -Path (Join-Path $payload 'sub\nested.txt') -Value 'nested' -NoNewli
 # A versioned PE, which is the case that exposed the File.Version bug.
 Copy-Item (Join-Path $env:SystemRoot 'System32\notepad.exe') (Join-Path $payload 'tool.exe') -Force
 
-$target = 'C:\Program Files\MsiMaker CI'
+$target = 'C:\Program Files\MsiForge CI'
 $upgradeCode = '4d9a1e77-3c52-4b18-9f06-7a2e5d3c1b40'
 
 function Write-Project {
     param([string] $Version, [string] $Path)
     $project = [ordered]@{
-        ProductName   = 'MsiMaker CI'
-        Manufacturer  = 'MsiMaker'
+        ProductName   = 'MsiForge CI'
+        Manufacturer  = 'MsiForge'
         Version       = $Version
         UpgradeCode   = $upgradeCode
         Platform      = 'X64'
-        InstallFolder = 'MsiMaker CI'
+        InstallFolder = 'MsiForge CI'
         Folders       = @(@{ SourceDir = $payload })
-        Registry      = @(@{ Root = 'HKLM'; Key = 'SOFTWARE\MsiMaker\CI'; Name = 'Version'; Value = $Version })
+        Registry      = @(@{ Root = 'HKLM'; Key = 'SOFTWARE\MsiForge\CI'; Name = 'Version'; Value = $Version })
     }
     $project | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $Path -NoNewline
 }
@@ -73,7 +73,7 @@ $installed = @(Get-ChildItem -Recurse -File -LiteralPath $target)
 Write-Host "installed $($installed.Count) file(s)"
 if ($installed.Count -ne 3) { throw "expected 3 files, found $($installed.Count)" }
 
-$registry = (Get-ItemProperty 'HKLM:\SOFTWARE\MsiMaker\CI').Version
+$registry = (Get-ItemProperty 'HKLM:\SOFTWARE\MsiForge\CI').Version
 if ($registry -ne '1.0.0') { throw "registry says '$registry', expected 1.0.0" }
 
 # ------------------------------------------------------------------ version 2
@@ -100,7 +100,7 @@ if ($content -ne 'version two') { throw "payload was not replaced: '$content'" }
 
 $arp = @(Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall' |
     ForEach-Object { Get-ItemProperty $_.PSPath } |
-    Where-Object { $_.DisplayName -eq 'MsiMaker CI' })
+    Where-Object { $_.DisplayName -eq 'MsiForge CI' })
 if ($arp.Count -ne 1) { throw "expected exactly one entry in Programs and Features, found $($arp.Count)" }
 if ($arp[0].DisplayVersion -ne '1.1.0') { throw "Programs and Features shows $($arp[0].DisplayVersion)" }
 Write-Host "one entry, at $($arp[0].DisplayVersion)"
@@ -109,11 +109,11 @@ Write-Host "one entry, at $($arp[0].DisplayVersion)"
 Invoke-Msi -Arguments @('/x', (Join-Path $work 'v2.msi'), '/qn') -Label 'uninstall' | Out-Null
 
 if (Test-Path $target) { throw "install folder survived uninstall" }
-if (Test-Path 'HKLM:\SOFTWARE\MsiMaker\CI') { throw "registry key survived uninstall" }
+if (Test-Path 'HKLM:\SOFTWARE\MsiForge\CI') { throw "registry key survived uninstall" }
 
 $remaining = @(Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall' |
     ForEach-Object { Get-ItemProperty $_.PSPath } |
-    Where-Object { $_.DisplayName -eq 'MsiMaker CI' })
+    Where-Object { $_.DisplayName -eq 'MsiForge CI' })
 if ($remaining.Count -ne 0) { throw "Programs and Features entry survived uninstall" }
 
 Write-Host ''

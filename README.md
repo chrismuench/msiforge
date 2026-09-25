@@ -1,4 +1,4 @@
-# MsiMaker
+# MsiForge
 
 Build MSI packages that upgrade cleanly in Intune — from Windows **or macOS**.
 
@@ -11,7 +11,7 @@ works.
 Most failed Intune upgrades are not Intune's doing. They are a ProductCode that
 did not change, a version that differs only in its fourth field, or a platform
 that moved between builds — all of which are visible in the package before
-anything is deployed. MsiMaker owns those values so they cannot be got wrong,
+anything is deployed. MsiForge owns those values so they cannot be got wrong,
 and will tell you plainly whether Intune is going to upgrade, install alongside,
 or quietly do nothing.
 
@@ -39,21 +39,21 @@ The same binary is the desktop app and the command line. Run it with no
 arguments and you get the window; run it with a command and you get the CLI:
 
 ```bash
-MsiMaker                      # the app
-MsiMaker doctor               # what can this machine do?
-MsiMaker selftest             # build and verify a package end to end
-MsiMaker build myapp.msimaker
+MsiForge                      # the app
+MsiForge doctor               # what can this machine do?
+MsiForge selftest             # build and verify a package end to end
+MsiForge build myapp.msiforge
 ```
 
 On macOS the binary is not notarised, so clear the quarantine flag once:
-`xattr -d com.apple.quarantine ./MsiMaker-macos-arm64 && chmod +x ./MsiMaker-macos-arm64`.
+`xattr -d com.apple.quarantine ./MsiForge-macos-arm64 && chmod +x ./MsiForge-macos-arm64`.
 
 From source:
 
 ```bash
-dotnet build MsiMaker.slnx
-dotnet run --project src/MsiMaker.App -- doctor
-dotnet run --project src/MsiMaker.App              # the app
+dotnet build MsiForge.slnx
+dotnet run --project src/MsiForge.App -- doctor
+dotnet run --project src/MsiForge.App              # the app
 ```
 
 ### The CLI
@@ -107,7 +107,7 @@ which every declared parameter is.
 
 ### `HELP=1`
 
-Every package MsiMaker builds can say what it accepts:
+Every package MsiForge builds can say what it accepts:
 
 ```
 msiexec /i app.msi HELP=1
@@ -137,7 +137,7 @@ chosen folder is passed through to the vendor installer — the app itself insta
 there, not just the wrapper. The same happens for a command-line
 `INSTALLFOLDER="C:\..."`. Under the covers this is the standard `CustomActionData`
 plumbing, since a deferred action cannot read the property directly. An installer
-whose switch MsiMaker cannot recognise falls back to its own default.
+whose switch MsiForge cannot recognise falls back to its own default.
 
 `C:\ProgramData` is not the same. Its default ACL gives `BUILTIN\Users`
 container-inherit **write and add-subdirectory**, and `CREATOR OWNER` full
@@ -169,7 +169,7 @@ cause is in there, but it is one line among thousands, phrased for whoever wrote
 the installer engine.
 
 ```
-msimaker explain install.log
+msiforge explain install.log
 ```
 
 Every explanation it gives is a failure that was hit, diagnosed and fixed while
@@ -214,21 +214,21 @@ digest yields a package that looks signed and is rejected on the device.
 
 ## Blueprints and bundles
 
-A blueprint is a `.json`. A **bundle** is a `.msimaker` — a zip carrying the
+A blueprint is a `.json`. A **bundle** is a `.msiforge` — a zip carrying the
 blueprint *and every payload file, including the original installer* — so it is
 one artefact you can version, hand over, archive next to the MSI it produced, or
 use to rebuild the exact same package on another machine. A bare `.json` names
 payload files on the machine that wrote it, and breaks the moment it moves.
 
 ```bash
-msimaker pack hpia.json HPIA.msimaker
-msimaker build HPIA.msimaker
+msiforge pack hpia.json HPIA.msiforge
+msiforge build HPIA.msiforge
 ```
 
 ## The blueprint library
 
 Some applications do not package the obvious way, and the knowledge of *why*
-tends to live in whoever last researched it. `msimaker blueprints` lists built-in
+tends to live in whoever last researched it. `msiforge blueprints` lists built-in
 blueprints that carry both the working configuration and the reason it is needed,
 grouped into applications and device/driver tools.
 
@@ -237,15 +237,15 @@ installed, upgraded and uninstalled here. The rest are marked **vendor docs**:
 their switches come from the vendor's own documentation and simply have not been
 run here, so give one a test install before a fleet rollout.
 
-Add your own by dropping JSON into `%APPDATA%\msimaker\blueprints` (or wherever
-`MSIMAKER_BLUEPRINTS` points). A file reusing a built-in id replaces it.
+Add your own by dropping JSON into `%APPDATA%\msiforge\blueprints` (or wherever
+`MSIFORGE_BLUEPRINTS` points). A file reusing a built-in id replaces it.
 
 ## Layout
 
 ```
-src/MsiMaker.Core   the engine: compound file, MSI tables, cabinet, blueprints, signing
-src/MsiMaker.Cli    the command line, linked into the app
-src/MsiMaker.App    Avalonia desktop GUI
+src/MsiForge.Core   the engine: compound file, MSI tables, cabinet, blueprints, signing
+src/MsiForge.Cli    the command line, linked into the app
+src/MsiForge.App    Avalonia desktop GUI
 tools/              development-time verification helpers
 blueprints/            the built-in blueprint library (source folder)
 ```
@@ -253,7 +253,7 @@ blueprints/            the built-in blueprint library (source folder)
 ## Testing
 
 ```bash
-dotnet test tests/MsiMaker.Tests/MsiMaker.Tests.csproj
+dotnet test tests/MsiForge.Tests/MsiForge.Tests.csproj
 ```
 
 CI builds and tests on Windows, macOS and Linux, signs a package on macOS and

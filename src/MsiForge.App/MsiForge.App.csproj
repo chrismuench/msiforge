@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>MsiForge.App</RootNamespace>
+    <AssemblyName>MsiForge</AssemblyName>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+
+    <!-- A release is one file. Self-contained because the people who package
+         software are not the people who get to install a .NET runtime on the
+         machine they do it from, and a prerequisite is the difference between
+         trying the tool and not.
+
+         Not trimmed: Avalonia resolves controls and styles reflectively from
+         XAML, and the trimmer cannot see those references, so a trimmed build
+         fails at run time on a screen nobody opened during testing rather than
+         at build time. The size is worth the certainty. -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <DebugType>embedded</DebugType>
+    <!-- Referenced projects drop their .pdb next to the output, which would make
+         a "single file" release a folder of three. Symbols are embedded instead. -->
+    <AllowedReferenceRelatedFileExtensions>none</AllowedReferenceRelatedFileExtensions>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Controls.DataGrid" Version="11.3.13" />
+    <PackageReference Include="Avalonia.Diagnostics" Version="11.3.22" Condition="'$(Configuration)'=='Debug'" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../MsiForge.Core/MsiForge.Core.csproj" />
+    <ProjectReference Include="../MsiForge.Cli/MsiForge.Cli.csproj" />
+  </ItemGroup>
+</Project>

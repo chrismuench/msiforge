@@ -1,7 +1,7 @@
 """Harvest the standard MSI table schema and action sequences out of a WiX-built
 MSI and emit them as C#.
 
-Running this against a known-good MSI means MsiMaker's baked-in schema is
+Running this against a known-good MSI means MsiForge's baked-in schema is
 transcribed from a real Windows Installer database rather than from memory.
 
     python tools/genschema.py <sample.msi> <MsiSchema.Generated.cs> <MsiSequences.Generated.cs>
@@ -80,7 +80,7 @@ HEADER = [
     '// Transcribed from a real Windows Installer database, not recalled.',
     '#nullable enable',
     '',
-    'namespace MsiMaker.Core.Msi;',
+    'namespace MsiForge.Core.Msi;',
     '',
     'public static partial class MsiSchema',
     '{',
@@ -158,7 +158,7 @@ for _, nm, ty in cols:
     out.append('        ("%s", 0x%04X),' % (nm, ty))
 out.append('    ];')
 out.append('')
-out.append('    /// <summary>_Validation rows for the standard tables MsiMaker emits.</summary>')
+out.append('    /// <summary>_Validation rows for the standard tables MsiForge emits.</summary>')
 out.append('    public static readonly object?[][] ValidationRows =')
 out.append('    [')
 rows = parse('_Validation', [ty for _, _, ty in cols])
