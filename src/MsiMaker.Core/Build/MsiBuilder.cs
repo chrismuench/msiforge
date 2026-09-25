@@ -222,6 +222,22 @@ public static class MsiBuilder
             .ToList();
         bool wrapsAnInstaller = installerRuns.Count > 0;
 
+        // A wrapper that installs a vendor app but never runs its uninstaller leaves
+        // the app behind when the MSI is removed: uninstalling clears the wrapper and
+        // the payload, but the vendor's own files and Programs entry stay. Because the
+        // uninstaller's path and name vary by installer (uninstall.exe in the install
+        // root for one, uninstall\helper.exe for another), it cannot be guessed
+        // safely here - so this warns rather than inventing one.
+        bool removesTheApp = project.Run.Any(r =>
+            r.When is RunWhen.Uninstall or RunWhen.Both
+            || !string.IsNullOrWhiteSpace(r.RollbackCommand)
+            || !string.IsNullOrWhiteSpace(r.RollbackArguments));
+        if (wrapsAnInstaller && !removesTheApp)
+            warnings.Add("This package installs a vendor application but has no uninstall "
+                         + "command, so removing the MSI will take away the wrapper but leave the "
+                         + "application installed. Add a run action with When=Uninstall that calls the "
+                         + "vendor's uninstaller (for example \"[INSTALLFOLDER]\\uninstall.exe\" /S).");
+
         // A wrapped installer decides where it lands from its own command line, not
         // from the Install folder here. If the arguments name no directory, the
         // location is whatever the vendor defaults to - which is the surprise when
