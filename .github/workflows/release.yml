@@ -45,8 +45,12 @@ jobs:
 
       # Proves the published binary runs on a clean runner with no .NET installed
       # beyond the SDK - and that its CLI half is wired up, which a GUI-only smoke
-      # test would not catch.
+      # test would not catch. Skipped for win-arm64: the Windows runners are x64
+      # and cannot execute an ARM64 binary (it exits 126), so running it there
+      # would only prove the runner's architecture. The Test step above already
+      # exercised the code on this runner.
       - name: Smoke test the published binary
+        if: matrix.rid != 'win-arm64'
         shell: bash
         run: |
           exe=out/MsiForge
