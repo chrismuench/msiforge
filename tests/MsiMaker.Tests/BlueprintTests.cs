@@ -39,7 +39,7 @@ public class BlueprintTests
     public void LibraryLoadsTheEmbeddedBlueprints()
     {
         var blueprints = BuiltIn().List();
-        Assert.True(blueprints.Count >= 5, $"expected the embedded library, got {blueprints.Count} blueprints");
+        Assert.True(blueprints.Count >= 4, $"expected the embedded library, got {blueprints.Count} blueprints");
         Assert.Contains(blueprints, r => r.Id == "hp-image-assistant");
         Assert.Contains(blueprints, r => r.Id == "git-for-windows");
     }

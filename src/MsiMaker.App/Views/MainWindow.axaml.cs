@@ -394,13 +394,38 @@ public partial class MainWindow : Window
         string name = Path.GetFileName(path);
         try
         {
-            await _model.AnalyseAsync(path);
+            var analysis = await _model.AnalyseAsync(path);
+            if (analysis.Kind == InstallerKind.MsiWrappedExe)
+            {
+                await RejectMsiBootstrapper(path, analysis);
+                return;
+            }
             Status($"{prefix} Analysed {name}: {_model.AnalysisSummary}.{note}".TrimStart());
         }
         catch (Exception ex)
         {
             Status($"{prefix} Could not analyse {name}: {ex.Message}".TrimStart());
         }
+    }
+
+    /// <summary>
+    /// Refuses an installer that installs via its own MSI: it is taken back out of
+    /// the payload and the reason is shown, because a wrapper around it fails at
+    /// install (Windows Installer will not run one install inside another).
+    /// </summary>
+    private async Task RejectMsiBootstrapper(string path, MsiMaker.Core.Payload.PayloadAnalysis analysis)
+    {
+        var row = _model.Files.FirstOrDefault(f =>
+            string.Equals(f.Source, path, StringComparison.OrdinalIgnoreCase));
+        if (row is not null) _model.RemoveFile(row);
+
+        string why = analysis.Warnings.FirstOrDefault()
+            ?? "This installer installs via its own MSI, so it cannot be wrapped in another MSI - "
+               + "Windows Installer will not run one install inside another. Extract the inner MSI "
+               + "and deploy it directly instead.";
+
+        Status($"{Path.GetFileName(path)} can't be wrapped - it installs via its own MSI.");
+        await new MessageDialog($"{Path.GetFileName(path)} can't be wrapped", why).ShowDialog(this);
     }
 
     private void OnRemoveFile(object? sender, RoutedEventArgs e)

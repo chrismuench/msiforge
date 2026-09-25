@@ -717,7 +717,7 @@ public sealed class MainViewModel : ObservableObject
     /// Runs the detective over an executable and seeds identity and switches
     /// from what it finds.
     /// </summary>
-    public async Task AnalyseAsync(string path)
+    public async Task<PayloadAnalysis> AnalyseAsync(string path)
     {
         // Reading a file someone else produced is the slow part, and on a
         // malformed one it can be very slow indeed. Held on the UI thread that
@@ -743,6 +743,15 @@ public sealed class MainViewModel : ObservableObject
         foreach (var e in a.Evidence) detail.AppendLine($"Evidence: {e}");
         foreach (var w in a.Warnings) detail.AppendLine($"Warning:  {w}");
         AnalysisDetail = detail.ToString();
+
+        // An installer that installs via its own MSI cannot be wrapped, so do not
+        // apply it or wire a doomed run action - hand it back for the caller to
+        // reject and explain.
+        if (a.Kind == InstallerKind.MsiWrappedExe)
+        {
+            AnalysisSummary = "Cannot be wrapped - installs via its own MSI";
+            return a;
+        }
 
         if (string.IsNullOrWhiteSpace(ProductName))
             ProductName = a.Version?.ProductName ?? Path.GetFileNameWithoutExtension(path);
@@ -770,6 +779,8 @@ public sealed class MainViewModel : ObservableObject
                 Arguments = a.SilentArguments ?? "",
                 When = RunWhen.Install,
             });
+
+        return a;
     }
 
     public void AddRun(RunAction action)

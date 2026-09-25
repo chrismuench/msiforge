@@ -121,6 +121,17 @@ public static class CommandLine
         foreach (var e in a.Evidence) Console.WriteLine($"  evidence: {e}");
         foreach (var w in a.Warnings) Console.WriteLine($"  warning:  {w}");
 
+        // An installer that installs via its own MSI cannot be wrapped, so refuse
+        // to write a starter project for one rather than hand back a package that
+        // fails at install. The warning above says why and what to do instead.
+        if (a.Kind == InstallerKind.MsiWrappedExe)
+        {
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("rejected: this installer installs via its own MSI and cannot be wrapped. "
+                                    + "Deploy the extracted MSI directly, as noted above.");
+            return 2;
+        }
+
         if (projectOut is not null)
         {
             var project = InstallerDetective.ToProject(a);

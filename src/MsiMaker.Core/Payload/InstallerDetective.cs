@@ -189,6 +189,26 @@ public static partial class InstallerDetective
 
         AddHpNote(result, pe, path);
 
+        // An installer that installs by running its own msiexec cannot be wrapped:
+        // a wrapper fails at run time with 1618, because Windows Installer will not
+        // run one install inside another. Caught two ways - an embedded MSI whose
+        // compound-file header is visible in the bytes, or a self-extractor whose
+        // version resource names it as one (Adobe Reader ships as "Adobe Self
+        // Extractor", with the MSI compressed inside where a byte scan cannot see it).
+        if (result.Kind == InstallerKind.Unknown && LooksLikeMsiBootstrapper(pe, data, out string msiEvidence))
+        {
+            result.Kind = InstallerKind.MsiWrappedExe;
+            result.Confidence = 80;
+            result.Evidence.Add(msiEvidence);
+            result.Warnings.Add("This EXE installs via its own MSI, so it cannot be wrapped in an MSI: "
+                                + "Windows Installer will not run one install inside another, and a "
+                                + "wrapper fails at install with error 1618. Extract the inner MSI and "
+                                + "deploy it directly instead (for Adobe Reader: "
+                                + "AcroRdrDC*.exe -sfx_o\"C:\\out\" -sfx_ne, then deploy AcroRead.msi with "
+                                + "any TRANSFORMS= as a line-of-business app).");
+            return result;
+        }
+
         if (result.Kind == InstallerKind.Unknown)
         {
             result.Warnings.Add("Installer family not recognised. Try '/?' or '/help' against the "
@@ -200,6 +220,50 @@ public static partial class InstallerDetective
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Whether the bytes contain an OLE compound-file header past the PE, i.e. an
+    /// embedded MSI. Searched after the header region because offset 0 is the PE
+    /// itself; a self-extractor appends or embeds the MSI further in.
+    /// </summary>
+    private static bool EmbedsCompoundFile(byte[] data)
+    {
+        ReadOnlySpan<byte> magic = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+        const int afterHeaders = 0x400;
+        if (data.Length <= afterHeaders + magic.Length) return false;
+        return data.AsSpan(afterHeaders).IndexOf(magic) >= 0;
+    }
+
+    /// <summary>
+    /// Whether this EXE installs through its own MSI, which cannot be wrapped. Only
+    /// two things qualify, deliberately narrowly: an actual embedded MSI (its
+    /// compound-file header is in the bytes), or an Adobe Reader/Acrobat
+    /// self-extractor, which always wraps AcroRead.msi even though it compresses it
+    /// out of sight. A plain self-extractor - 7-Zip, WinRAR, an HP SoftPaq - wraps
+    /// files, not an MSI, and is fine to package, so it is not caught here.
+    /// </summary>
+    private static bool LooksLikeMsiBootstrapper(PeFile pe, byte[] data, out string evidence)
+    {
+        if (EmbedsCompoundFile(data))
+        {
+            evidence = "PE embeds a Windows Installer .msi database";
+            return true;
+        }
+
+        string product = pe.Version?.ProductName ?? "";
+        string company = pe.Version?.CompanyName ?? "";
+        bool C(string s, string sub) => s.Contains(sub, StringComparison.OrdinalIgnoreCase);
+
+        if ((C(company, "Adobe") || C(product, "Adobe"))
+            && (C(product, "Acrobat") || C(product, "Reader") || C(product, "Self Extractor")))
+        {
+            evidence = $"Version resource names an Adobe installer ('{product}'), which wraps AcroRead.msi";
+            return true;
+        }
+
+        evidence = "";
+        return false;
     }
 
     /// <summary>
