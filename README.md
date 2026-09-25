@@ -131,9 +131,13 @@ anyone running it by hand can choose where it goes and see it finish. It is
 authored in pure MSI tables (no native custom actions) and a silent install
 (`/qn`, as Intune uses) never shows it, so it costs nothing there. Turn it off
 (`ShowInstallWizard: false`, or the checkbox on the Build step) for a package
-meant only to be pushed silently. For a wrapped vendor installer, the folder
-chosen in the wizard places the wrapper's own payload; the vendor's files still
-land wherever its installer switch sends them.
+meant only to be pushed silently. For a wrapped vendor installer whose directory
+switch is recognised (NSIS `/D=`, Inno `/DIR=`, `INSTALLDIR=`, `APPDIR=`), the
+chosen folder is passed through to the vendor installer — the app itself installs
+there, not just the wrapper. The same happens for a command-line
+`INSTALLFOLDER="C:\..."`. Under the covers this is the standard `CustomActionData`
+plumbing, since a deferred action cannot read the property directly. An installer
+whose switch MsiMaker cannot recognise falls back to its own default.
 
 `C:\ProgramData` is not the same. Its default ACL gives `BUILTIN\Users`
 container-inherit **write and add-subdirectory**, and `CREATOR OWNER` full

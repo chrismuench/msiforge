@@ -979,7 +979,7 @@
                     <Button.Flyout>
                       <Flyout>
                         <TextBlock Classes="disclosure"
-                                   Text="Adds a Welcome, a destination-folder page with Browse, a ready-to-install page, progress, and a completion screen for anyone who runs the MSI by hand. A silent deployment (Intune, or msiexec /qn) never shows it, so it costs nothing there. Turn it off for a package meant only to be pushed silently. Note: for a wrapped vendor installer, the folder chosen here places the wrapper's own payload; the vendor's files still land wherever its own switch sends them." />
+                                   Text="Adds a Welcome, a destination-folder page with Browse, a ready-to-install page, progress, and a completion screen for anyone who runs the MSI by hand. The folder they choose is passed through to a wrapped vendor installer whose switch is recognised (NSIS /D=, Inno /DIR=, INSTALLDIR=, APPDIR=), so the app installs where they picked - pre-filled to Program Files under the product name. A silent deployment (Intune, or msiexec /qn) never shows the wizard, so it costs nothing there; turn it off for a package meant only to be pushed silently." />
                       </Flyout>
                     </Button.Flyout>
                   </Button>

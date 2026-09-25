@@ -38,6 +38,21 @@ public static class MsiBuilder
     private const int CaIgnoreReturn = 64;
 
     /// <summary>
+    /// msidbCustomActionTypeProperty (type 51): an immediate "set property"
+    /// action. Used to hand a deferred action the chosen install folder through
+    /// CustomActionData, since a deferred action cannot read [INSTALLFOLDER] itself.
+    /// </summary>
+    private const int CaSetProperty = 51;
+
+    /// <summary>
+    /// The token a run action carries when its installer should follow the folder
+    /// the user (or a command line) chose. The builder rewrites it to
+    /// [CustomActionData] and adds the setter that fills it, because a deferred
+    /// action reads properties as empty.
+    /// </summary>
+    private const string InstallFolderToken = "[INSTALLFOLDER]";
+
+    /// <summary>
     /// msidbCustomActionTypeRollback. A rollback action runs only when the
     /// install fails, and must be scheduled immediately ahead of the deferred
     /// action it undoes - rollback actions execute in reverse order.
@@ -175,7 +190,10 @@ public static class MsiBuilder
         // A public property set on the command line is dropped when the install
         // elevates, unless it is listed here. That failure is silent: the property
         // is simply empty by the time the deferred action reads it.
-        var secure = new List<string> { DowngradeProperty, UpgradeProperty, HelpProperty };
+        // INSTALLFOLDER is public and can be set on the command line (msiexec /i
+        // pkg.msi INSTALLFOLDER="C:\..."); without this it is dropped when the
+        // install elevates, so a chosen folder would silently not take.
+        var secure = new List<string> { DowngradeProperty, UpgradeProperty, HelpProperty, "INSTALLFOLDER" };
         foreach (var parameter in project.Parameters)
         {
             if (!string.IsNullOrEmpty(parameter.Default))
@@ -611,20 +629,44 @@ public static class MsiBuilder
 
                 int type = baseType | CaDeferred | CaNoImpersonate | (run.IgnoreExitCode ? CaIgnoreReturn : 0);
 
+                // A deferred action reads properties as empty, so [INSTALLFOLDER] in
+                // its command line cannot resolve on its own. Where it appears, hand
+                // the chosen folder in through CustomActionData: an immediate setter
+                // scheduled just before the action fills a property named after it,
+                // and the action's command line reads [CustomActionData]. This is how
+                // the folder the user picked in the wizard (or a command-line
+                // INSTALLFOLDER=) reaches the vendor installer under the covers.
+                bool HasToken(string? t) =>
+                    !string.IsNullOrEmpty(t) && t!.Contains(InstallFolderToken, StringComparison.OrdinalIgnoreCase);
+                string Resolve(string t) =>
+                    t.Replace(InstallFolderToken, "[CustomActionData]", StringComparison.OrdinalIgnoreCase);
+
                 if (run.When is RunWhen.Install or RunWhen.Both)
                 {
                     string condition = Combine(run.Condition, "NOT REMOVE")!;
+                    string id = UniqueId($"ca_{run.Id}_install", identifiers);
+                    bool flow = HasToken(target);
+                    bool rbFlow = run.HasRollback && HasToken(rollbackTarget);
 
-                    // Two adjacent slots so the rollback immediately precedes the
-                    // action it undoes, whatever follows.
-                    int slot = afterInstallFiles.Take(run.HasRollback ? 2 : 1);
+                    // Slots, in execution order: [rollback setter] rollback
+                    // [install setter] install. The rollback still lands immediately
+                    // before the install in the deferred script; the setters are
+                    // immediate and do not enter that script.
+                    int need = 1 + (run.HasRollback ? 1 : 0) + (flow ? 1 : 0) + (rbFlow ? 1 : 0);
+                    int slot = afterInstallFiles.Take(need);
 
                     if (run.HasRollback)
                     {
                         string rollbackId = UniqueId($"ca_{run.Id}_rollback", identifiers);
+                        if (rbFlow)
+                        {
+                            string setter = UniqueId($"set_{rollbackId}", identifiers);
+                            customAction.Add(setter, CaSetProperty, rollbackId, InstallFolderToken, null);
+                            installSequence.Add(setter, condition, slot++);
+                        }
                         customAction.Add(rollbackId,
                             rollbackBaseType | CaRollback | CaDeferred | CaNoImpersonate | CaIgnoreReturn,
-                            rollbackSource, rollbackTarget, null);
+                            rollbackSource, rbFlow ? Resolve(rollbackTarget) : rollbackTarget, null);
                         installSequence.Add(rollbackId, condition, slot++);
                     }
                     else
@@ -634,16 +676,29 @@ public static class MsiBuilder
                                      + "RollbackCommand or RollbackArguments.");
                     }
 
-                    string id = UniqueId($"ca_{run.Id}_install", identifiers);
-                    customAction.Add(id, type, source, target, null);
+                    if (flow)
+                    {
+                        string setter = UniqueId($"set_{id}", identifiers);
+                        customAction.Add(setter, CaSetProperty, id, InstallFolderToken, null);
+                        installSequence.Add(setter, condition, slot++);
+                    }
+                    customAction.Add(id, type, source, flow ? Resolve(target) : target, null);
                     installSequence.Add(id, condition, slot);
                 }
                 if (run.When is RunWhen.Uninstall or RunWhen.Both)
                 {
+                    string uninstallCondition = Combine(run.Condition, "REMOVE~=\"ALL\"")!;
                     string id = UniqueId($"ca_{run.Id}_uninstall", identifiers);
-                    customAction.Add(id, type, source, target, null);
-                    installSequence.Add(id, Combine(run.Condition, "REMOVE~=\"ALL\""),
-                                        beforeRemoveFiles.Take());
+                    bool flow = HasToken(target);
+                    int slot = beforeRemoveFiles.Take(flow ? 2 : 1);
+                    if (flow)
+                    {
+                        string setter = UniqueId($"set_{id}", identifiers);
+                        customAction.Add(setter, CaSetProperty, id, InstallFolderToken, null);
+                        installSequence.Add(setter, uninstallCondition, slot++);
+                    }
+                    customAction.Add(id, type, source, flow ? Resolve(target) : target, null);
+                    installSequence.Add(id, uninstallCondition, slot);
                 }
             }
         }

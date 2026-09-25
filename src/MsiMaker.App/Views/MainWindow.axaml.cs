@@ -736,6 +736,16 @@ public partial class MainWindow : Window
     /// </summary>
     private async Task<bool> ResolveInstallLocations(bool askEvenWhenAlreadySet)
     {
+        // With the setup wizard on, the person running the MSI chooses the folder,
+        // not the packager - so instead of prompting here, point each wrapped
+        // installer's directory switch at [INSTALLFOLDER]. The build turns that into
+        // the CustomActionData plumbing that carries the choice to the vendor EXE.
+        if (_model.Project.ShowInstallWizard)
+        {
+            WireRunActionsToWizardFolder();
+            return true;
+        }
+
         foreach (var row in _model.Run.ToList())
         {
             var action = row.Model;
@@ -801,6 +811,53 @@ public partial class MainWindow : Window
             _model.Append($"install location for '{action.ExePath}' set to {choice.Path}");
         }
         return true;
+    }
+
+    /// <summary>
+    /// Points each install-time wrapped installer's directory switch at the
+    /// [INSTALLFOLDER] token, so the folder chosen in the MSI's wizard (or set with
+    /// INSTALLFOLDER= on the command line) is passed through to the vendor EXE. Uses
+    /// the switch already in the arguments, or the one the installer's family is
+    /// known to take; an unrecognised installer with no switch is left to its own
+    /// default, since there is nothing to write the folder into.
+    /// </summary>
+    private void WireRunActionsToWizardFolder()
+    {
+        const string token = "[INSTALLFOLDER]";
+        foreach (var row in _model.Run.ToList())
+        {
+            var action = row.Model;
+            bool isInstall = action.When is RunWhen.Install or RunWhen.Both;
+            if (!isInstall || string.IsNullOrWhiteSpace(action.ExePath)) continue;
+
+            // Already carries the token from a previous pass or by hand.
+            if (!string.IsNullOrEmpty(action.Arguments)
+                && action.Arguments.Contains(token, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (InstallerDetective.MentionsInstallDirectory(action.Arguments))
+            {
+                row.Arguments = InstallerDetective.WithInstallDirectory(action.Arguments, token);
+                action.UseInstallerDefaultLocation = false;
+                continue;
+            }
+
+            // No directory switch in the arguments: write the one the installer
+            // family is known to use, if the payload can be recognised.
+            string? source = _model.Files
+                .FirstOrDefault(f => string.Equals(
+                    Path.GetFileName(f.Source), Path.GetFileName(action.ExePath),
+                    StringComparison.OrdinalIgnoreCase))?.Source;
+            string? template = source is not null && File.Exists(source)
+                ? InstallerDetective.Analyse(source).SilentArgumentsWithDirectory
+                : null;
+            if (template is not null)
+            {
+                row.Arguments = string.Format(
+                    System.Globalization.CultureInfo.InvariantCulture, template, token);
+                action.UseInstallerDefaultLocation = false;
+            }
+        }
     }
 
     private void OnOpenOutput(object? sender, RoutedEventArgs e)

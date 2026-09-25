@@ -208,6 +208,45 @@ public class EngineTests
     }
 
     [Fact]
+    public void ChosenFolderIsPassedToAWrappedInstallerViaCustomActionData()
+    {
+        string dir = TempDir();
+        string exe = Path.Combine(dir, "Setup.exe");
+        File.WriteAllText(exe, "stub installer");
+
+        var project = SampleProject(dir);
+        project.Files.Clear();
+        project.Files.Add(new PayloadFile { SourcePath = exe });
+        project.Run.Add(new RunAction
+        {
+            Id = "vendor",
+            ExePath = "Setup.exe",
+            Arguments = "/S /D=[INSTALLFOLDER]",
+            When = RunWhen.Install,
+            IgnoreExitCode = true,
+        });
+
+        string output = Path.Combine(dir, "flow.msi");
+        MsiBuilder.Build(project, output);
+        var db = MsiDatabase.Load(output);
+        var ca = db.Tables["CustomAction"].Rows;
+
+        // The deferred vendor action reads the folder from CustomActionData, because
+        // a deferred action cannot read [INSTALLFOLDER] itself.
+        var install = ca.Single(r => (string?)r[0] == "ca_vendor_install");
+        Assert.Contains("[CustomActionData]", (string)install[3]!);
+        Assert.DoesNotContain("[INSTALLFOLDER]", (string)install[3]!);
+
+        // An immediate type-51 setter fills that CustomActionData from [INSTALLFOLDER],
+        // so the wizard's (or command line's) choice reaches the vendor EXE.
+        Assert.Contains(ca, r =>
+            (int)r[1]! == 51 && (string?)r[2] == "ca_vendor_install" && (string?)r[3] == "[INSTALLFOLDER]");
+
+        // And INSTALLFOLDER survives elevation, so a command-line value is not dropped.
+        Assert.Contains("INSTALLFOLDER", db.GetProperty("SecureCustomProperties"));
+    }
+
+    [Fact]
     public void SetupWizardIsOmittedWhenDisabled()
     {
         string dir = TempDir();
