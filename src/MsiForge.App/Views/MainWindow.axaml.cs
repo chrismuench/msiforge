@@ -637,10 +637,11 @@ public partial class MainWindow : Window
             }
 
             string intunewinNote = "";
+            string? intuneWinPath = null;
             if (_model.EmitIntuneWin)
             {
-                string intunewin = Path.ChangeExtension(result.MsiPath, ".intunewin");
-                var packaged = IntuneWinPackager.PackageMsi(result.MsiPath, intunewin);
+                intuneWinPath = Path.ChangeExtension(result.MsiPath, ".intunewin");
+                var packaged = IntuneWinPackager.PackageMsi(result.MsiPath, intuneWinPath);
                 _model.Append($"built {packaged.Path} ({packaged.EncryptedSize:N0} bytes)");
                 intunewinNote = "  +  .intunewin";
             }
@@ -665,18 +666,30 @@ public partial class MainWindow : Window
             _model.ShowBuildResult(true, $"{Path.GetFileName(result.MsiPath)} is ready",
                                    result.MsiPath, detail);
 
-            // The easy-to-use part: rather than make the admin read the log, put the
-            // deployment commands in front of them, ready to copy, with a way to the
-            // folder the package (and any .intunewin) landed in.
-            string sub = _model.EmitIntuneWin
-                ? "Deploy the .intunewin through Intune, or run the MSI directly with these commands. Anyone can run it with HELP=1 to see the same options."
-                : "Deploy it with these commands. Anyone can run it with HELP=1 to see the same options.";
-            await new DeploymentDialog(
-                $"{Path.GetFileName(result.MsiPath)} is ready",
-                sub,
-                DeploymentCommands(result),
-                ParametersNote(),
-                result.MsiPath).ShowDialog(this);
+            // The easy-to-use part: rather than make the admin read the log, put what
+            // they need in front of them, ready to copy. For an .intunewin that is the
+            // exact Intune portal settings - install and uninstall commands and the
+            // detection rule; otherwise the plain msiexec commands.
+            if (intuneWinPath is not null)
+            {
+                var cfg = IntuneConfiguration.From(result.MsiPath);
+                await new DeploymentDialog(
+                    $"{Path.GetFileName(intuneWinPath)} - Intune settings",
+                    "Enter these in the Intune portal under Apps > Windows > Add > Windows app (Win32). "
+                    + "The .intunewin to upload is in the folder below.",
+                    IntuneCommands(cfg),
+                    IntuneNote(cfg),
+                    intuneWinPath).ShowDialog(this);
+            }
+            else
+            {
+                await new DeploymentDialog(
+                    $"{Path.GetFileName(result.MsiPath)} is ready",
+                    "Deploy it with these commands. Anyone can run it with HELP=1 to see the same options.",
+                    DeploymentCommands(result),
+                    ParametersNote(),
+                    result.MsiPath).ShowDialog(this);
+            }
         }
         catch (Exception ex)
         {
@@ -706,6 +719,37 @@ public partial class MainWindow : Window
             new("Uninstall", $"msiexec /x {productCode} /qn"),
             new("Install to a chosen folder", $"msiexec /i {named} INSTALLFOLDER=\"C:\\Program Files\\App\""),
         ];
+    }
+
+    /// <summary>
+    /// The copyable Intune portal values for a Win32 (.intunewin) app: the install
+    /// and uninstall commands, and the MSI detection rule (product code + version).
+    /// </summary>
+    private static List<DeployCommand> IntuneCommands(IntuneConfiguration c) =>
+    [
+        new("Install command", c.InstallCommand),
+        new("Uninstall command", c.UninstallCommand),
+        new("Detection rule - MSI product code", c.ProductCode),
+        new("Detection rule - version (greater than or equal to)", c.Version),
+    ];
+
+    /// <summary>The Intune fields that are settings rather than copyable commands, plus any warnings.</summary>
+    private static string IntuneNote(IntuneConfiguration c)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("In the portal:");
+        sb.AppendLine("  Detection rule type: MSI (no detection script needed)");
+        sb.AppendLine($"  Install behaviour:   {(c.PerMachine ? "System" : "User")}");
+        sb.AppendLine($"  Architecture:        {c.Architecture}");
+        sb.AppendLine("  Minimum OS:          Windows 10 1809 or later");
+        sb.AppendLine("  Return codes:        0 and 1707 success, 3010 soft reboot, 1641 hard reboot, 1618 retry");
+        if (c.Warnings.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("Worth fixing before you deploy:");
+            foreach (var w in c.Warnings) sb.AppendLine($"  - {w}");
+        }
+        return sb.ToString();
     }
 
     /// <summary>The declared parameters as a note, or null when there are none.</summary>
