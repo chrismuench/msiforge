@@ -33,25 +33,46 @@ public static class PayloadExtractor
             "msimaker-extract", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dest);
 
+        // ShellExecute, not a plain CreateProcess: a SoftPaq's manifest asks for
+        // administrator, and only ShellExecute can raise the UAC prompt that lets
+        // it start. Launched the other way, the process fails before it runs with
+        // "requires elevation" (Win32 740). A silent switch keeps any window off
+        // screen; WindowStyle replaces CreateNoWindow, which ShellExecute forbids.
         var psi = new ProcessStartInfo
         {
             FileName = archiveExe,
             Arguments = spec.Switches.Replace(DestToken, dest, StringComparison.Ordinal),
-            UseShellExecute = false,
-            CreateNoWindow = true,
+            UseShellExecute = true,
+            WindowStyle = ProcessWindowStyle.Hidden,
             WorkingDirectory = dest,
         };
 
-        using var process = Process.Start(psi)
-            ?? throw new InvalidOperationException($"Could not start {Path.GetFileName(archiveExe)}.");
-
-        int timeout = Math.Max(30, spec.TimeoutSeconds);
-        if (!process.WaitForExit(TimeSpan.FromSeconds(timeout)))
+        Process process;
+        try
         {
-            try { process.Kill(entireProcessTree: true); }
-            catch (Exception ex) when (ex is InvalidOperationException or Win32Exception) { /* already gone */ }
-            throw new TimeoutException(
-                $"{Path.GetFileName(archiveExe)} did not finish extracting within {timeout}s.");
+            process = Process.Start(psi)
+                ?? throw new InvalidOperationException($"Could not start {Path.GetFileName(archiveExe)}.");
+        }
+        catch (Win32Exception ex)
+        {
+            // 1223: the user dismissed the elevation prompt.
+            throw new InvalidOperationException(
+                ex.NativeErrorCode == 1223
+                    ? $"Extraction of {Path.GetFileName(archiveExe)} needs administrator rights, and the elevation prompt was cancelled."
+                    : $"Could not start {Path.GetFileName(archiveExe)}: {ex.Message}",
+                ex);
+        }
+
+        using (process)
+        {
+            int timeout = Math.Max(30, spec.TimeoutSeconds);
+            if (!process.WaitForExit(TimeSpan.FromSeconds(timeout)))
+            {
+                try { process.Kill(entireProcessTree: true); }
+                catch (Exception ex) when (ex is InvalidOperationException or Win32Exception) { /* already gone */ }
+                throw new TimeoutException(
+                    $"{Path.GetFileName(archiveExe)} did not finish extracting within {timeout}s.");
+            }
         }
 
         // Success is judged by the marker file, not the exit code: some SoftPaqs
