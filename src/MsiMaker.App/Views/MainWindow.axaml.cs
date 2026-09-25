@@ -58,6 +58,7 @@ public partial class MainWindow : Window
         Find<Button>("BuildButton").Click += OnBuild;
         Find<Button>("OpenOutputButton").Click += OnOpenOutput;
         Find<Button>("ResultShowFolderButton").Click += OnOpenOutput;
+        Find<Button>("NewButton").Click += OnNew;
         Find<Button>("OpenProjectButton").Click += OnOpenProject;
         Find<Button>("SaveProjectButton").Click += OnSaveProject;
 
@@ -162,6 +163,7 @@ public partial class MainWindow : Window
     // ------------------------------------------------------------- library
 
     /// <summary>Tab order is fixed in the XAML; these are the two the library sends people to.</summary>
+    private const int StartTab = 0;
     private const int PayloadTab = 1;
     private const int IdentityTab = 2;
 
@@ -337,11 +339,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnStartBlank(object? sender, RoutedEventArgs e)
-    {
-        ShowTab(PayloadTab);
-        Status("Starting from nothing. Add the installer you want to wrap on the Payload tab.");
-    }
+    private async void OnStartBlank(object? sender, RoutedEventArgs e) => await StartFresh(PayloadTab);
 
     // ------------------------------------------------------------- payload
 
@@ -651,7 +649,8 @@ public partial class MainWindow : Window
             await new DeploymentDialog(
                 $"{Path.GetFileName(result.MsiPath)} is ready",
                 sub,
-                string.Join("\n", DeploymentCommandLines(result)),
+                DeploymentCommands(result),
+                ParametersNote(),
                 result.MsiPath).ShowDialog(this);
         }
         catch (Exception ex)
@@ -663,46 +662,40 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// The command lines an administrator needs to deploy the built MSI - install,
-    /// silent install, the HELP switch, any declared parameters, and the exact
-    /// uninstall - so they never have to be reconstructed by hand. Shared by the
-    /// log and the "package ready" dialog, formatted for a monospace column.
+    /// The commands an administrator needs to deploy the built MSI - install,
+    /// silent install, the HELP switch, the exact uninstall, and a folder override -
+    /// each a labelled, copyable line so none has to be reconstructed by hand.
     /// </summary>
-    private List<string> DeploymentCommandLines(BuildResult result)
+    private List<DeployCommand> DeploymentCommands(BuildResult result)
     {
         string name = Path.GetFileName(result.MsiPath);
         string q = name.Contains(' ') ? "\"" : "";
         string named = $"{q}{name}{q}";
         string productCode = DeterministicGuid.Format(result.ProductCode);
 
-        const int pad = 24;
-        string Row(string label, string command) => $"{label.PadRight(pad)}{command}";
+        return
+        [
+            new("Install (shows a progress bar)", $"msiexec /i {named}"),
+            new("Install silently", $"msiexec /i {named} /qn /norestart"),
+            new("Show what it accepts", $"msiexec /i {named} HELP=1"),
+            new("Uninstall", $"msiexec /x {productCode} /qn"),
+            new("Install to a chosen folder", $"msiexec /i {named} INSTALLFOLDER=\"C:\\Program Files\\App\""),
+        ];
+    }
 
-        var lines = new List<string>
-        {
-            Row("Install (with a bar)", $"msiexec /i {named}"),
-            Row("Install silently", $"msiexec /i {named} /qn /norestart"),
-            Row("Show its options", $"msiexec /i {named} HELP=1"),
-            Row("Uninstall", $"msiexec /x {productCode} /qn"),
-            // A public property of the MSI's own payload; a wrapped vendor installer
-            // still lands where the build-time choice put it, not here.
-            Row("Set install folder", $"msiexec /i {named} INSTALLFOLDER=\"C:\\Program Files\\App\""),
-        };
-
+    /// <summary>The declared parameters as a note, or null when there are none.</summary>
+    private string? ParametersNote()
+    {
         var parameters = _model.Project.Parameters;
-        if (parameters.Count > 0)
+        if (parameters.Count == 0) return null;
+        var sb = new System.Text.StringBuilder("Parameters — add NAME=value to any command above:");
+        foreach (var p in parameters)
         {
-            lines.Add("");
-            lines.Add("Parameters (add NAME=value to any command above):");
-            foreach (var p in parameters)
-            {
-                string dft = string.IsNullOrWhiteSpace(p.Default) ? "" : $" [default: {p.Default}]";
-                string desc = string.IsNullOrWhiteSpace(p.Description) ? "" : $" - {p.Description}";
-                lines.Add($"  {p.Name}={dft}{desc}");
-            }
+            string dft = string.IsNullOrWhiteSpace(p.Default) ? "" : $"  [default: {p.Default}]";
+            string desc = string.IsNullOrWhiteSpace(p.Description) ? "" : $"  {p.Description}";
+            sb.Append($"\n    {p.Name}={dft}{desc}");
         }
-
-        return lines;
+        return sb.ToString();
     }
 
     /// <summary>Puts the deployment commands in the build log as a permanent record.</summary>
@@ -710,7 +703,13 @@ public partial class MainWindow : Window
     {
         _model.Append("");
         _model.Append("how to deploy this MSI:");
-        foreach (var line in DeploymentCommandLines(result)) _model.Append("  " + line);
+        foreach (var c in DeploymentCommands(result))
+        {
+            _model.Append($"  {c.Label}:");
+            _model.Append($"    {c.Command}");
+        }
+        if (ParametersNote() is { } note)
+            foreach (var line in note.Split('\n')) _model.Append("  " + line);
     }
 
     /// <summary>
@@ -901,7 +900,14 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void OnSaveProject(object? sender, RoutedEventArgs e)
+    private async void OnSaveProject(object? sender, RoutedEventArgs e) => await SaveProjectAsync();
+
+    /// <summary>
+    /// Runs the save flow. Returns true when the package was written, false when
+    /// the user cancelled the picker or the save failed - so a caller saving before
+    /// clearing the canvas does not throw the work away on a cancelled save.
+    /// </summary>
+    private async Task<bool> SaveProjectAsync()
     {
         var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
@@ -910,7 +916,7 @@ public partial class MainWindow : Window
             DefaultExtension = ProjectBundle.Extension.TrimStart('.'),
             FileTypeChoices = [BundleType, ProjectType],
         });
-        if (file is null) return;
+        if (file is null) return false;
         try
         {
             string path = file.Path.LocalPath;
@@ -926,10 +932,36 @@ public partial class MainWindow : Window
                 Status($"Saved {file.Name}. This stores settings only and points at your payload files by path; "
                        + "save as .msimaker to bundle the installer in so it works on another machine.");
             }
+            return true;
         }
         catch (Exception ex)
         {
             Status($"Could not save blueprint: {ex.Message}");
+            return false;
         }
     }
+
+    /// <summary>
+    /// Clears everything back to a fresh canvas, offering to save first when the
+    /// current package has content. Cancelling the prompt - or cancelling the save -
+    /// leaves the current work untouched.
+    /// </summary>
+    private async Task StartFresh(int landOnTab)
+    {
+        if (_model.HasContent)
+        {
+            var choice = await new SaveChangesDialog().ShowDialog<SaveChangesChoice>(this);
+            if (choice == SaveChangesChoice.Cancel) return;
+            if (choice == SaveChangesChoice.Save && !await SaveProjectAsync()) return;
+        }
+
+        _model.Reset();
+        _lastBuiltMsi = null;
+        ShowTab(landOnTab);
+        Status(landOnTab == PayloadTab
+            ? "New package. Add the installer you want to wrap on the Payload step."
+            : "New package. Start from a blueprint, or add your own installer.");
+    }
+
+    private async void OnNew(object? sender, RoutedEventArgs e) => await StartFresh(StartTab);
 }

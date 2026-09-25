@@ -852,4 +852,23 @@ public sealed class MainViewModel : ObservableObject
 
         RefreshWizard();
     }
+
+    /// <summary>
+    /// Whether the current package holds anything worth keeping - a payload, a
+    /// command, a task, or a named product. Drives the "save before starting over?"
+    /// prompt; an untouched blank canvas has nothing to lose.
+    /// </summary>
+    public bool HasContent =>
+        _project.Files.Count > 0 || _project.Folders.Count > 0 || _project.Run.Count > 0
+        || _project.Tasks.Count > 0 || !string.IsNullOrWhiteSpace(_project.ProductName);
+
+    /// <summary>Back to a fresh, empty canvas: a new project, no output, no log, at step one.</summary>
+    public void Reset()
+    {
+        LoadProject(new MsiProject { UpgradeCode = Guid.NewGuid() });
+        OutputPath = "";
+        Log = "";
+        HasBuildResult = false;
+        CurrentStep = 0;
+    }
 }
