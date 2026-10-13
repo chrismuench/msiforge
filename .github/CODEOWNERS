@@ -1,0 +1,33 @@
+# CODEOWNERS for MsiForge
+# These owners will be the default owners for everything in the repo
+
+# Default owners for everything in the repo
+* @chrismuench
+
+# Build and CI/CD
+.github/workflows/ @chrismuench
+Directory.Build.props @chrismuench
+
+# Core engine
+src/MsiForge.Core/ @chrismuench
+
+# CLI
+src/MsiForge.Cli/ @chrismuench
+
+# App (GUI)
+src/MsiForge.App/ @chrismuench
+
+# Blueprints
+blueprints/ @chrismuench
+
+# Tests
+tests/ @chrismuench
+
+# Documentation
+*.md @chrismuench
+docs/ @chrismuench
+
+# Security-related files
+SECURITY.md @chrismuench
+LICENSE* @chrismuench
+CODE_OF_CONDUCT.md @chrismuench
