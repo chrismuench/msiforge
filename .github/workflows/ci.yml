@@ -86,7 +86,7 @@ jobs:
       - name: Sign a package built on this machine
         run: bash .github/scripts/test-signing.sh
         env:
-          MSIFORGE_CI_PFX_PASSWORD: ci-test-password
+          MSIFORGE_CI_PFX_PASSWORD: "ci-test-password"
 
   # Only Windows can actually install what we build, so the lifecycle test -
   # install, upgrade in place, uninstall - lives here. This is the test that
