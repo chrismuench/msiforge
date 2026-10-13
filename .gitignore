@@ -6,3 +6,11 @@ out/
 .idea/
 dist/
 /dist/
+
+# Agent working state, never source. Coding-agent adapters write their session state
+# into the checkout: .claude/ for Claude Code, .paperclip-runtime/ for the Paperclip
+# adapter (sessions, skills, bridge server). FluxDeploy swept 19 of these files into
+# a commit on 2026-10-13 because the rule was missing there too.
+.claude/
+.paperclip-runtime/
+**/.paperclip-runtime/
