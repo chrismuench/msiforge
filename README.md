@@ -283,3 +283,7 @@ is tested rather than assumed.
 
 See [docs/DESIGN.md](docs/DESIGN.md) for the format notes, the upgrade rules the
 tool enforces, and the bugs that were found the hard way.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE.txt](LICENSE.txt) file for details.
