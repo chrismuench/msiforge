@@ -1,0 +1,32 @@
+name: Deploy website
+
+on:
+  push:
+    branches: [gh-pages]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment: github-pages
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: gh-pages
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          path: .
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
