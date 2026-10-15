@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="google-site-verification" content="ZVEpP_TjB3JJske4SospEez-AMaVDo8Yb0lCWAF4tOs" />
+    <title>MsiForge - Build Intune-Ready MSIs</title>
+    <meta name="description" content="Build MSI packages that upgrade cleanly in Intune—from Windows, macOS, or Linux. No WiX, no native dependencies, nothing to install.">
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans">
+    <!-- Hero -->
+    <section class="pt-20 pb-16 px-6 text-center bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950">
+        <div class="max-w-4xl mx-auto">
+            <div class="flex justify-center gap-4 mb-8">
+                <span class="px-3 py-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded text-sm font-semibold">Windows</span>
+                <span class="px-3 py-1 bg-slate-500/20 text-slate-400 border border-slate-500/30 rounded text-sm font-semibold">macOS</span>
+                <span class="px-3 py-1 bg-green-500/20 text-green-400 border border-green-500/30 rounded text-sm font-semibold">Linux</span>
+            </div>
+            <h1 class="text-6xl font-bold tracking-tight mb-6">MsiForge</h1>
+            <p class="text-xl text-slate-300 mb-8 max-w-2xl mx-auto">
+                Build MSI packages that upgrade cleanly in Intune—from <span class="font-semibold text-white">Windows, macOS, or Linux</span>. 
+                <span class="text-slate-400">No WiX, no native dependencies, nothing to install.</span>
+            </p>
+            <div class="flex items-center justify-center gap-4 mb-8">
+                <span class="px-3 py-1 bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded text-sm font-mono">v0.1.1</span>
+                <a href="https://github.com/chrismuench/msiforge/releases" class="text-sm text-slate-400 hover:text-white transition-colors">View all releases</a>
+            </div>
+            <div class="flex flex-wrap gap-4 justify-center">
+                <a href="https://github.com/chrismuench/msiforge" class="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-colors">View on GitHub</a>
+                <a href="https://github.com/chrismuench/msiforge/releases" class="px-8 py-3 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-lg transition-colors">Download</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Tabs -->
+    <div class="max-w-6xl mx-auto px-6 mt-12">
+        <div class="flex border-b border-slate-700 mb-8 overflow-x-auto">
+            <button onclick="showTab('overview')" id="tab-overview" class="px-6 py-3 border-b-2 border-indigo-500 text-white font-semibold hover:text-slate-300 hover:border-slate-500 transition-colors whitespace-nowrap">Overview</button>
+            <button onclick="showTab('features')" id="tab-features" class="px-6 py-3 border-b-2 border-transparent text-slate-400 hover:text-white hover:border-slate-500 transition-colors whitespace-nowrap">Features</button>
+            <button onclick="showTab('platforms')" id="tab-platforms" class="px-6 py-3 border-b-2 border-transparent text-slate-400 hover:text-white hover:border-slate-500 transition-colors whitespace-nowrap">Platforms</button>
+            <button onclick="showTab('quickstart')" id="tab-quickstart" class="px-6 py-3 border-b-2 border-transparent text-slate-400 hover:text-white hover:border-slate-500 transition-colors whitespace-nowrap">Quick Start</button>
+        </div>
+
+        <!-- Overview Tab -->
+        <div id="content-overview" class="tab-content">
+            <div class="grid md:grid-cols-2 gap-8">
+                <div class="bg-slate-900 p-8 rounded-2xl border border-slate-800 hover:border-indigo-500 transition-colors">
+                    <h2 class="text-2xl font-bold text-indigo-400 mb-4">Why Not WiX?</h2>
+                    <p class="text-slate-300 leading-relaxed">
+                        WiX ships <code class="bg-slate-800 px-2 py-1 rounded text-indigo-400 text-sm">wixnative.exe</code> for Windows only. It cannot emit an MSI on macOS or Linux. Licensing is another concern—WiX 5.0.2 is the last MS-RL release. 6.0+ moved to a model that bills companies over $10k revenue.
+                    </p>
+                </div>
+                <div class="bg-slate-900 p-8 rounded-2xl border border-slate-800 hover:border-indigo-500 transition-colors">
+                    <h2 class="text-2xl font-bold text-indigo-400 mb-4">The Solution</h2>
+                    <p class="text-slate-300 leading-relaxed">
+                        MsiForge is pure managed C#—cross-platform, MIT licensed, with no native dependencies or licensing fees. Same binary works on Windows, macOS, and Linux.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Features Tab -->
+        <div id="content-features" class="tab-content hidden">
+            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div class="bg-slate-900 p-6 rounded-2xl border border-slate-800">
+                    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Pure Managed C#</h3>
+                    <p class="text-slate-400 text-sm">No WiX required. The entire MSI engine is written in pure managed C#—no native dependencies, no licensing fees.</p>
+                </div>
+                <div class="bg-slate-900 p-6 rounded-2xl border border-slate-800">
+                    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Cross-Platform</h3>
+                    <p class="text-slate-400 text-sm">Build and sign MSIs on Windows, macOS, and Linux. The same binary works everywhere.</p>
+                </div>
+                <div class="bg-slate-900 p-6 rounded-2xl border border-slate-800">
+                    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Intune-Ready</h3>
+                    <p class="text-slate-400 text-sm">Automatic handling of ProductCode, UpgradeCode, versioning. Your upgrades actually upgrade.</p>
+                </div>
+                <div class="bg-slate-900 p-6 rounded-2xl border border-slate-800">
+                    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Single Binary</h3>
+                    <p class="text-slate-400 text-sm">Download one file. Run it. No .NET runtime to install. One file does it all.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Platforms Tab -->
+        <div id="content-platforms" class="tab-content hidden">
+            <div class="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
+                <div class="p-6 border-b border-slate-800">
+                    <h2 class="text-2xl font-bold text-indigo-400 mb-4">What Works Where</h2>
+                    <p class="text-slate-400 mb-6">Build and inspect on any platform. Install and test only on Windows.</p>
+                </div>
+                <div class="p-6">
+                    <div class="grid md:grid-cols-2 gap-8">
+                        <div>
+                            <h3 class="text-lg font-semibold text-white mb-3">Windows, macOS, Linux</h3>
+                            <ul class="space-y-2 text-slate-400">
+                                <li class="flex items-center"><span class="mr-2 text-green-500">✓</span> Build an MSI</li>
+                                <li class="flex items-center"><span class="mr-2 text-green-500">✓</span> Inspect packages</li>
+                                <li class="flex items-center"><span class="mr-2 text-green-500">✓</span> Round-trip</li>
+                                <li class="flex items-center"><span class="mr-2 text-green-500">✓</span> Upgrade checks</li>
+                                <li class="flex items-center"><span class="mr-2 text-green-500">✓</span> .intunewin packaging</li>
+                                <li class="flex items-center"><span class="mr-2 text-green-500">✓</span> PFX signing</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-semibold text-white mb-3">Windows only</h3>
+                            <ul class="space-y-2 text-slate-400">
+                                <li class="flex items-center"><span class="mr-2 text-green-500">✓</span> Install and test (msiexec)</li>
+                                <li class="flex items-center"><span class="mr-2 text-green-500">✓</span> Certificate store signing</li>
+                                <li class="flex items-center"><span class="mr-2 text-green-500">✓</span> Azure Trusted Signing</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl">
+                <h3 class="text-lg font-semibold text-blue-400 mb-2">Running on macOS or Linux?</h3>
+                <p class="text-slate-300 text-sm mb-3">The macOS binary needs to be unquarantined on first run:</p>
+                <div class="code-block bg-slate-950 rounded-xl p-4 font-mono text-sm overflow-x-auto">
+                    <div class="flex">
+                        <span class="w-8 text-slate-600 select-none">1</span>
+                        <span class="text-slate-300">xattr -d com.apple.quarantine ./MsiForge-macos-arm64</span>
+                    </div>
+                    <div class="flex">
+                        <span class="w-8 text-slate-600 select-none">2</span>
+                        <span class="text-slate-300">chmod +x ./MsiForge-macos-arm64</span>
+                    </div>
+                </div>
+                <p class="text-slate-300 text-sm mt-3">On Linux, just run:</p>
+                <div class="code-block bg-slate-950 rounded-xl p-4 font-mono text-sm overflow-x-auto">
+                    <div class="flex">
+                        <span class="w-8 text-slate-600 select-none">1</span>
+                        <span class="text-slate-300">chmod +x ./MsiForge-linux-x64</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Start Tab -->
+        <div id="content-quickstart" class="tab-content hidden">
+            <div class="bg-slate-900 rounded-2xl border border-slate-800 p-6">
+                <h2 class="text-2xl font-bold text-indigo-400 mb-4">Quick Start</h2>
+                <div class="code-block bg-slate-950 rounded-xl p-6 font-mono text-sm overflow-x-auto">
+                    <div class="space-y-2">
+                        <div class="flex">
+                            <span class="w-8 text-slate-600 select-none">1</span>
+                            <span class="text-indigo-400">msiforge</span>
+                            <span class="text-slate-500 ml-2"># the app</span>
+                        </div>
+                        <div class="flex">
+                            <span class="w-8 text-slate-600 select-none">2</span>
+                            <span class="text-indigo-400">msiforge doctor</span>
+                            <span class="text-slate-500 ml-2"># what can this machine do?</span>
+                        </div>
+                        <div class="flex">
+                            <span class="w-8 text-slate-600 select-none">3</span>
+                            <span class="text-indigo-400">msiforge selftest</span>
+                            <span class="text-slate-500 ml-2"># build and verify a package</span>
+                        </div>
+                        <div class="flex">
+                            <span class="w-8 text-slate-600 select-none">4</span>
+                            <span class="text-indigo-400">msiforge build myapp.msiforge</span>
+                            <span class="text-slate-500 ml-2"># build an MSI</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-6 p-4 bg-slate-800 rounded-xl">
+                    <h3 class="text-lg font-semibold text-white mb-2">Available Platforms</h3>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="px-3 py-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded text-sm">Windows x64</span>
+                        <span class="px-3 py-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded text-sm">Windows ARM64</span>
+                        <span class="px-3 py-1 bg-slate-500/20 text-slate-400 border border-slate-500/30 rounded text-sm">macOS x64</span>
+                        <span class="px-3 py-1 bg-slate-500/20 text-slate-400 border border-slate-500/30 rounded text-sm">macOS ARM64</span>
+                        <span class="px-3 py-1 bg-green-500/20 text-green-400 border border-green-500/30 rounded text-sm">Linux x64</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="py-16 px-6 bg-slate-950 border-t border-slate-900 text-center">
+        <div class="max-w-4xl mx-auto">
+            <p class="text-slate-300 mb-4 text-lg">MIT License • <a href="https://github.com/chrismuench/msiforge" class="text-indigo-400 hover:underline">GitHub</a> • <a href="https://github.com/chrismuench/msiforge/releases" class="text-indigo-400 hover:underline">Releases</a></p>
+            <p class="text-slate-500 text-sm max-w-2xl mx-auto">
+                MsiForge owns the invisible details that cause Intune upgrades to fail silently.
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        function showTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.add('hidden');
+            });
+            document.getElementById('content-' + tabId).classList.remove('hidden');
+            document.querySelectorAll('button').forEach(btn => {
+                btn.classList.remove('border-b-2', 'border-indigo-500', 'text-white');
+                btn.classList.add('border-transparent', 'text-slate-400');
+            });
+            document.getElementById('tab-' + tabId).classList.add('border-b-2', 'border-indigo-500', 'text-white');
+            document.getElementById('tab-' + tabId).classList.remove('border-transparent', 'text-slate-400');
+        }
+        showTab('overview');
+    </script>
+</body>
+</html>
+ 
