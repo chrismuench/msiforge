@@ -15,16 +15,22 @@ anything is deployed. MsiForge owns those values so they cannot be got wrong,
 and will tell you plainly whether Intune is going to upgrade, install alongside,
 or quietly do nothing.
 
-## Why not WiX
+The other half is that you are packaging an application, not writing installer
+code. There is no authoring project to learn and keep maintained — point it at a
+folder, get an MSI, move on.
+
+## Why the engine is our own
 
 WiX ships `wixnative.exe` for `win-x86`, `win-x64` and `win-arm64` only. The
 `wix` .NET tool installs on macOS but cannot emit an MSI there, because database
-creation and cabinet compression are delegated to that native helper. No version
-of WiX fixes this.
+creation and cabinet compression are delegated to that native helper. That is
+still the case in WiX v7, the current release.
 
-Licensing closes the door further: **WiX 5.0.2 is the last MS-RL release**. 6.0
-and later moved to the Open Source Maintenance Fee model, which bills companies
-above $10k revenue.
+Licensing is the other half. WiX source remains under MS-RL in every current
+version, but from v6 onward *using* WiX carries a maintenance-fee obligation for
+organisations above $10,000 in annual revenue. 5.0.2 is the last release on the
+v5 branch, so staying off that fee means building on a branch that no longer
+moves.
 
 So the engine here is its own: MS-CFB compound file, MSI tables and string pool,
 MSZIP cabinets, all in managed code. WiX 5 is used at development time only, as

@@ -1,4 +1,4 @@
-# MsiMaker — design
+# MsiForge — design
 
 A native desktop app (Windows + macOS) for building MSI packages, aimed at
 IT admins deploying through Intune. The design priority is **upgrade
@@ -11,13 +11,15 @@ correctness**: packages produced here must upgrade cleanly in Intune, every time
 WiX ships `wixnative.exe` only for `win-x86`, `win-x64` and `win-arm64`. The
 `wix` .NET tool *installs* on macOS but cannot emit an MSI there, because
 database creation and cabinet compression are delegated to that native helper.
-No WiX version fixes this.
+That is still the case in WiX v7, the current release.
 
-Licensing closes the door further: WiX **5.0.2 is the last MS-RL release**.
-6.0 and later moved to the Open Source Maintenance Fee model, which bills
-companies above $10k revenue. Building on v5 means building on a frozen branch.
+Licensing is the other half. WiX source remains under MS-RL in every current
+version, but from v6 onward using WiX carries a maintenance-fee obligation for
+organisations above $10,000 in annual revenue. 5.0.2 is the last release on the
+v5 branch, so pinning v5 to avoid the fee means building on a branch that no
+longer moves.
 
-So `MsiMaker.Core` writes MSIs itself, in pure managed C# with no native
+So `MsiForge.Core` writes MSIs itself, in pure managed C# with no native
 dependency:
 
 ```
@@ -154,7 +156,7 @@ arrange explicitly.
 **Rollback.** A deferred custom action is not undone when a later step fails.
 Without a paired rollback action, an install that dies after registering a
 scheduled task or running a wrapped installer leaves both behind. Every deferred
-action MsiMaker emits gets a rollback scheduled immediately ahead of it, since
+action MsiForge emits gets a rollback scheduled immediately ahead of it, since
 rollback actions replay in reverse order. A run action's undo may be a different
 program from the action itself - a wrapped installer is undone by the vendor's
 uninstaller, not by running the installer again - so `RollbackCommand` is
