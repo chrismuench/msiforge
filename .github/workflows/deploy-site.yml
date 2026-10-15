@@ -1,0 +1,47 @@
+# The website lives on this branch and nowhere else, so its deployment lives
+# here too. GitHub reads push-event workflows from the branch being pushed, so a
+# workflow that deploys gh-pages has to exist on gh-pages.
+#
+# The artifact is assembled by hand from a file list. Uploading '.' is what
+# published the entire source tree to the public site once already, and an
+# unknown input like `exclude:` is silently ignored rather than rejected - so
+# this stays explicit, and adding a file to the site means adding it here.
+name: Deploy site
+
+on:
+  push:
+    branches: [gh-pages]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Assemble the site
+        run: |
+          mkdir -p _site
+          install -m 644 index.html _site/index.html
+          touch _site/.nojekyll
+
+      - uses: actions/configure-pages@v6
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+      - id: deploy
+        uses: actions/deploy-pages@v5
