@@ -89,15 +89,21 @@
         <div id="content-overview" class="tab-content">
             <div class="grid md:grid-cols-2 gap-8">
                 <div class="bg-slate-900 p-8 rounded-2xl border border-slate-800 hover:border-indigo-500 transition-colors">
-                    <h2 class="text-2xl font-bold text-indigo-400 mb-4">Why Not WiX?</h2>
+                    <h2 class="text-2xl font-bold text-indigo-400 mb-4">Point it at a folder</h2>
                     <p class="text-slate-300 leading-relaxed">
-                        WiX ships <code class="bg-slate-800 px-2 py-1 rounded text-indigo-400 text-sm">wixnative.exe</code> for Windows only. It cannot emit an MSI on macOS or Linux. Licensing is another concern—WiX 5.0.2 is the last MS-RL release. 6.0+ moved to a model that bills companies over $10k revenue.
+                        You are packaging an application, not writing installer code. One binary, no authoring project to learn and keep maintained: give it a folder and it produces an MSI that upgrades cleanly in Intune.
+                    </p>
+                    <p class="text-slate-400 text-sm mt-4 leading-relaxed">
+                        ProductCode, UpgradeCode and versioning are owned by the tool, so they cannot be got wrong — and it tells you plainly whether Intune will upgrade in place, install alongside, or quietly do nothing.
                     </p>
                 </div>
                 <div class="bg-slate-900 p-8 rounded-2xl border border-slate-800 hover:border-indigo-500 transition-colors">
-                    <h2 class="text-2xl font-bold text-indigo-400 mb-4">The Solution</h2>
+                    <h2 class="text-2xl font-bold text-indigo-400 mb-4">Why the engine is our own</h2>
                     <p class="text-slate-300 leading-relaxed">
-                        MsiForge is pure managed C#—cross-platform, MIT licensed, with no native dependencies or licensing fees. Same binary works on Windows, macOS, and Linux.
+                        WiX delegates database creation and cabinet compression to <code class="bg-slate-800 px-2 py-1 rounded text-indigo-400 text-sm">wixnative.exe</code>, which is built for Windows only — so it cannot emit an MSI on macOS or Linux. That is still true in WiX v7. Its source stays under MS-RL, but from v6 onward using it carries a maintenance-fee obligation above $10,000 in annual revenue.
+                    </p>
+                    <p class="text-slate-400 text-sm mt-4 leading-relaxed">
+                        MsiForge is pure managed C#, MIT licensed, no native dependencies and nothing owed: the same binary on Windows, macOS and Linux.
                     </p>
                 </div>
             </div>
