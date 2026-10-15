@@ -34,7 +34,10 @@ jobs:
       - name: Assemble the site
         run: |
           mkdir -p _site
-          install -m 644 index.html _site/index.html
+          for f in index.html robots.txt sitemap.xml \
+                   og-image.png favicon.svg favicon.png apple-touch-icon.png; do
+            install -m 644 "$f" "_site/$f"
+          done
           touch _site/.nojekyll
 
       - uses: actions/configure-pages@v6
