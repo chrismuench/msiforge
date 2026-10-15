@@ -32,64 +32,22 @@
     <meta name="twitter:image" content="https://chrismuench.github.io/msiforge/og-image.png">
 
     <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@graph": [
-        {
-          "@type": "SoftwareApplication",
-          "name": "MsiForge",
-          "applicationCategory": "DeveloperApplication",
-          "operatingSystem": "Windows, macOS, Linux",
-          "url": "https://chrismuench.github.io/msiforge/",
-          "downloadUrl": "https://github.com/chrismuench/msiforge/releases",
-          "description": "Command line and GUI tool that builds MSI packages in pure managed C#, with no WiX and no native dependencies. Runs on Windows, macOS, and Linux.",
-          "license": "https://opensource.org/licenses/MIT",
-          "offers": {
-            "@type": "Offer",
-            "price": "0",
-            "priceCurrency": "USD"
-          },
-          "sameAs": "https://github.com/chrismuench/msiforge"
+      {
+        "@type": "SoftwareApplication",
+        "name": "MsiForge",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Windows, macOS, Linux",
+        "url": "https://chrismuench.github.io/msiforge/",
+        "downloadUrl": "https://github.com/chrismuench/msiforge/releases",
+        "description": "Command line and GUI tool that builds MSI packages in pure managed C#, with no WiX and no native dependencies. Runs on Windows, macOS, and Linux.",
+        "license": "https://opensource.org/licenses/MIT",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
         },
-        {
-          "@type": "FAQPage",
-          "mainEntity": [
-            {
-              "@type": "Question",
-              "name": "Can I build an MSI on macOS or Linux?",
-              "acceptedAnswer": {
-                "@type": "Answer",
-                "text": "Yes. The MSI engine is written in pure managed C# with no native dependencies, so package creation, inspection, round-tripping, upgrade checks, and .intunewin packaging all run on Windows, macOS, and Linux. Only installing a package needs Windows, because msiexec is Windows-only."
-              }
-            },
-            {
-              "@type": "Question",
-              "name": "Do I need WiX or the Windows SDK to use MsiForge?",
-              "acceptedAnswer": {
-                "@type": "Answer",
-                "text": "No. MsiForge has no WiX dependency and nothing to install. Download one self-contained executable and run it."
-              }
-            },
-            {
-              "@type": "Question",
-              "name": "Can MsiForge code-sign a package?",
-              "acceptedAnswer": {
-                "@type": "Answer",
-                "text": "Yes, from a PFX on all three platforms, using in-process managed signing with no external tools. Signing from the Windows certificate store and Azure Trusted Signing both need signtool, so they are Windows-only."
-              }
-            },
-            {
-              "@type": "Question",
-              "name": "Is MsiForge free?",
-              "acceptedAnswer": {
-                "@type": "Answer",
-                "text": "Yes. MsiForge is open source under the MIT license."
-              }
-            }
-          ]
-        }
-      ]
-    }
+        "sameAs": "https://github.com/chrismuench/msiforge"
+      }
     </script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
