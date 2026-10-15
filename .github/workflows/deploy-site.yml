@@ -40,6 +40,23 @@ jobs:
           done
           touch _site/.nojekyll
 
+      # Pinned exactly, because this output is the site's appearance and a silent
+      # drift in what gets purged would be invisible until someone loaded the page.
+      # Node is preinstalled on the runner, so there is no setup step to keep in
+      # sync with a version file.
+      - name: Build the stylesheet
+        run: npx --yes tailwindcss@3.4.19 -c tailwind.config.js -i input.css -o _site/tailwind.css --minify
+
+      # An empty or truncated stylesheet would still deploy and render the page as
+      # unstyled HTML, so fail here rather than publish that.
+      - name: Verify the stylesheet
+        run: |
+          set -e
+          size=$(wc -c < _site/tailwind.css)
+          echo "tailwind.css: $size bytes"
+          test "$size" -gt 8000
+          grep -q 'hidden' _site/tailwind.css
+
       - uses: actions/configure-pages@v6
 
       - uses: actions/upload-pages-artifact@v5
