@@ -16,6 +16,15 @@ updates:
     labels:
       - "dependencies"
       - "nuget"
+    ignore:
+      # Avalonia 12 is a major upgrade, not a bump: all four Dependabot PRs for
+      # it (11.3.x -> 12.1.x) failed CI, and the migration needs real API work.
+      # Holding at 11.x stops the PRs being reopened every week. Scoped to
+      # version-updates, so a security advisory against 11.x still gets a PR.
+      - dependency-name: "Avalonia*"
+        update-types: ["version-updates"]
+        versions:
+          - ">= 12.0.0"
 
   # Enable version updates for GitHub Actions
   - package-ecosystem: "github-actions"
