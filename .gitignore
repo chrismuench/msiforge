@@ -1,0 +1,3 @@
+# tailwind build output and local tooling; deploy-site.yml assembles _site at deploy time
+_site/
+node_modules/
