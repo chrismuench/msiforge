@@ -17,14 +17,16 @@ updates:
       - "dependencies"
       - "nuget"
     ignore:
-      # Avalonia 12 is a major upgrade, not a bump: all four Dependabot PRs for
-      # it (11.3.x -> 12.1.x) failed CI, and the migration needs real API work.
-      # Holding at 11.x stops the PRs being reopened every week. Scoped to
-      # version-updates, so a security advisory against 11.x still gets a PR.
+      # Avalonia 12 is a major upgrade, not a bump: the Dependabot PRs for it
+      # (11.3.x -> 12.1.x, #9-#13) all failed CI, and the migration needs real
+      # API work. Blocking majors only keeps 11.3.x patch and minor updates
+      # flowing, and leaves security updates untouched - Dependabot applies a
+      # `versions:` list to security updates as well, so filtering by version
+      # here would have silently suppressed a future advisory against 11.x.
+      # The only accepted update-types are version-update:semver-patch /
+      # -minor / -major; any other string is dropped without error.
       - dependency-name: "Avalonia*"
-        update-types: ["version-updates"]
-        versions:
-          - ">= 12.0.0"
+        update-types: ["version-update:semver-major"]
 
   # Enable version updates for GitHub Actions
   - package-ecosystem: "github-actions"
