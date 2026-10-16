@@ -48,7 +48,7 @@ jobs:
 
       - name: Upload the CLI
         if: matrix.os == 'windows-latest'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: msiforge
           path: src/MsiForge.App/bin/Release/net10.0/
@@ -110,7 +110,7 @@ jobs:
 
       - name: Upload installer logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: msiexec-logs
           path: ${{ runner.temp }}/msiforge-ci/*.log

@@ -66,7 +66,7 @@ jobs:
           [ -f "$src.exe" ] && src="$src.exe"
           mv "$src" "${{ matrix.asset }}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.asset }}
           path: ${{ matrix.asset }}
