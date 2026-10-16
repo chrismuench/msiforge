@@ -6,3 +6,6 @@ out/
 .idea/
 dist/
 /dist/
+
+# agent harness runtime state (session memory, HUD)
+.autohand/
