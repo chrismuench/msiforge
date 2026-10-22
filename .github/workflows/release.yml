@@ -26,6 +26,17 @@ jobs:
           - { os: ubuntu-latest,  rid: linux-x64, asset: MsiForge-linux-x64 }
 
     runs-on: ${{ matrix.os }}
+    # The Azure trust is scoped to this environment, so the federated credential
+    # only accepts tokens minted for it - see docs/RELEASE-SIGNING.md. Heads up:
+    # any approval gate on the environment holds all five matrix jobs, not just
+    # the two that sign.
+    environment: release
+    # id-token: write is what lets the runner exchange its identity for an Azure
+    # token without storing a password in this repo. contents stays read here: the
+    # only job that needs write is publish.
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
@@ -66,6 +77,76 @@ jobs:
           [ -f "$src.exe" ] && src="$src.exe"
           mv "$src" "${{ matrix.asset }}"
 
+      # ------------------------------------------------------------------ signing
+      # Authenticode is a PE thing, so only the two Windows binaries are signed.
+      # The macOS and Linux files are shipped as they are, and the release notes
+      # say so rather than leaving people to discover it from Gatekeeper.
+      #
+      # Deliberately after the smoke test and the rename: the bytes verified here
+      # are the bytes uploaded, so nothing can drift between the two.
+      - name: Check signing is configured
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        env:
+          ENDPOINT: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          ACCOUNT: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          PROFILE: ${{ vars.AZURE_CERTIFICATE_PROFILE }}
+          TENANT: ${{ secrets.AZURE_TENANT_ID }}
+          CLIENT: ${{ secrets.AZURE_CLIENT_ID }}
+          SUB: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          missing=0
+          for pair in "repo variable AZURE_SIGNING_ENDPOINT=$ENDPOINT" \
+                      "repo variable AZURE_SIGNING_ACCOUNT=$ACCOUNT" \
+                      "repo variable AZURE_CERTIFICATE_PROFILE=$PROFILE" \
+                      "secret AZURE_TENANT_ID=$TENANT" \
+                      "secret AZURE_CLIENT_ID=$CLIENT" \
+                      "secret AZURE_SUBSCRIPTION_ID=$SUB"; do
+            name="${pair%%=*}"; val="${pair#*=}"
+            if [ -z "$val" ]; then echo "::error::$name is not set - refusing to publish an unsigned binary."; missing=1; fi
+          done
+          exit $missing
+
+      - name: Azure login
+        if: matrix.os == 'windows-latest'
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign
+        if: matrix.os == 'windows-latest'
+        uses: azure/artifact-signing-action@v2
+        with:
+          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_CERTIFICATE_PROFILE }}
+          files: ${{ github.workspace }}\${{ matrix.asset }}
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          description: MsiForge
+          description-url: https://chrismuench.github.io/msiforge/
+
+      # Not "log the status": a release whose signature does not verify should
+      # fail here rather than surface as a SmartScreen warning on a customer's
+      # desktop three weeks from now.
+      - name: Verify the signature
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $asset = "${{ matrix.asset }}"
+          $sig = Get-AuthenticodeSignature $asset
+          if ($sig.Status -ne 'Valid') {
+            throw "$asset is not validly signed (status $($sig.Status): $($sig.StatusMessage))"
+          }
+          & signtool.exe verify /pa /v $asset
+          if ($LASTEXITCODE -ne 0) { throw "signtool rejected the signature on $asset" }
+          "signed by   : $($sig.SignerCertificate.Subject)"
+          "thumbprint  : $($sig.SignerCertificate.Thumbprint)"
+          "timestamped : $(if ($sig.TimeStamperCertificate) { $sig.TimeStamperCertificate.Subject } else { 'NO - signature will expire with the certificate' })"
+
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.asset }}
@@ -87,6 +168,11 @@ jobs:
           body: |
             One file per platform. Download it and run it - there is no installer
             and no .NET runtime to install first.
+
+            The two Windows binaries are Authenticode-signed with Azure Artifact
+            Signing (SHA-256 file digest, RFC 3161 timestamp). The macOS and Linux
+            binaries are **not** signed: Authenticode has no equivalent there, and
+            macOS code signing plus notarisation is a separate task.
 
             The same binary is both the desktop app and the command line: run it
             with no arguments for the window, or with a command for the CLI.

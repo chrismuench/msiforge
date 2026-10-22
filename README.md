@@ -54,6 +54,9 @@ MsiForge build myapp.msiforge
 On macOS the binary is not notarised, so clear the quarantine flag once:
 `xattr -d com.apple.quarantine ./MsiForge-macos-arm64 && chmod +x ./MsiForge-macos-arm64`.
 
+The Windows binaries are Authenticode-signed with a timestamp; the macOS and Linux
+ones are not signed at all, since there is nothing equivalent to sign them with.
+
 From source:
 
 ```bash
@@ -288,7 +291,9 @@ process, exhaust memory, or run anything. The parsers are hand-written, so that
 is tested rather than assumed.
 
 See [docs/DESIGN.md](docs/DESIGN.md) for the format notes, the upgrade rules the
-tool enforces, and the bugs that were found the hard way.
+tool enforces, and the bugs that were found the hard way, and
+[docs/RELEASE-SIGNING.md](docs/RELEASE-SIGNING.md) for how the release binaries
+get signed from CI without a certificate file being stored anywhere.
 
 ## License
 
