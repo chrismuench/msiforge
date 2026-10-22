@@ -68,6 +68,34 @@ The client ID, tenant ID and subscription ID are identifiers rather than
 credentials, so putting them in secrets is convention more than necessity. Nothing
 in this workflow would weaken if they were variables instead.
 
+## Doing it from PowerShell
+
+`tools/New-SigningOidcCredential.ps1` carries out steps 3 to 5 for any number of
+repositories, and is safe to re-run — existing apps, credentials and role
+assignments are found and left alone.
+
+```powershell
+./tools/New-SigningOidcCredential.ps1 `
+    -TenantId '...' -SubscriptionId '...' `
+    -AccountName 'contoso-signing' -ProfileName 'contoso-release' `
+    -Region 'wus3' `
+    -Repos 'me/msiforge','me/other-app','me/third-app','me/fourth-app'
+```
+
+It checks `-Region` against where the signing account actually lives and overrides
+it with a warning if they disagree, since that mismatch is otherwise a 403 at the
+first signing call rather than an error here. Then it prints the `gh variable` and
+`gh secret` commands to finish each repository.
+
+Three things that cost time if you script this by hand:
+
+- `New-AzADAppFederatedCredential` takes **`-ApplicationObjectId`** — the app's
+  object id, not the client id you will be pasting into GitHub.
+- The service principal appears a moment *after* the application does. Assigning a
+  role before it lands fails with something that reads like a permission problem;
+  the script polls for it.
+- The subject has to say `environment:`, not a branch. See step 3.
+
 ## What the release job does
 
 `build` (all five platforms) → publish → smoke-test the binary → name the asset →
