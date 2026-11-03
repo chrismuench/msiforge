@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="google-site-verification" content="ZVEpP_TjB3JJske4SospEez-AMaVDo8Yb0lCWAF4tOs" />
     <title>MsiForge - Build Intune-Ready MSIs</title>
-    <meta name="description" content="Build MSI packages that upgrade cleanly in Intune—from Windows, macOS, or Linux. No WiX, no native dependencies, nothing to install.">
+    <meta name="description" content="Build MSI packages that upgrade cleanly in Intune—on Windows x64 and ARM64. No WiX, no native dependencies, nothing to install.">
     <link rel="canonical" href="https://chrismuench.github.io/msiforge/">
     <meta name="theme-color" content="#020617">
 
@@ -20,15 +20,15 @@
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="MsiForge">
     <meta property="og:title" content="MsiForge - Build Intune-Ready MSIs">
-    <meta property="og:description" content="Build MSI packages that upgrade cleanly in Intune—from Windows, macOS, or Linux. No WiX, no native dependencies, nothing to install.">
+    <meta property="og:description" content="Build MSI packages that upgrade cleanly in Intune—on Windows x64 and ARM64. No WiX, no native dependencies, nothing to install.">
     <meta property="og:url" content="https://chrismuench.github.io/msiforge/">
     <meta property="og:image" content="https://chrismuench.github.io/msiforge/og-image.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
-    <meta property="og:image:alt" content="MsiForge - build MSIs that upgrade cleanly in Intune, from Windows, macOS, or Linux">
+    <meta property="og:image:alt" content="MsiForge - build MSIs that upgrade cleanly in Intune, on Windows">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="MsiForge - Build Intune-Ready MSIs">
-    <meta name="twitter:description" content="Build MSI packages that upgrade cleanly in Intune—from Windows, macOS, or Linux. No WiX, no native dependencies, nothing to install.">
+    <meta name="twitter:description" content="Build MSI packages that upgrade cleanly in Intune—on Windows x64 and ARM64. No WiX, no native dependencies, nothing to install.">
     <meta name="twitter:image" content="https://chrismuench.github.io/msiforge/og-image.png">
 
     <script type="application/ld+json">
@@ -36,10 +36,10 @@
         "@type": "SoftwareApplication",
         "name": "MsiForge",
         "applicationCategory": "DeveloperApplication",
-        "operatingSystem": "Windows, macOS, Linux",
+        "operatingSystem": "Windows",
         "url": "https://chrismuench.github.io/msiforge/",
         "downloadUrl": "https://github.com/chrismuench/msiforge/releases",
-        "description": "Command line and GUI tool that builds MSI packages in pure managed C#, with no WiX and no native dependencies. Runs on Windows, macOS, and Linux.",
+        "description": "Command line and GUI tool that builds MSI packages in pure managed C#, with no WiX and no native dependencies. Ships for Windows x64 and ARM64.",
         "license": "https://opensource.org/licenses/MIT",
         "offers": {
           "@type": "Offer",
@@ -56,13 +56,13 @@
     <section class="pt-20 pb-16 px-6 text-center bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950">
         <div class="max-w-4xl mx-auto">
             <div class="flex justify-center gap-4 mb-8">
-                <span class="px-3 py-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded text-sm font-semibold">Windows</span>
-                <span class="px-3 py-1 bg-slate-500/20 text-slate-400 border border-slate-500/30 rounded text-sm font-semibold">macOS</span>
-                <span class="px-3 py-1 bg-green-500/20 text-green-400 border border-green-500/30 rounded text-sm font-semibold">Linux</span>
+                <span class="px-3 py-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded text-sm font-semibold">Windows x64</span>
+                <span class="px-3 py-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded text-sm font-semibold">Windows ARM64</span>
+                <span class="px-3 py-1 bg-slate-500/20 text-slate-400 border border-slate-500/30 rounded text-sm font-semibold">Authenticode signed</span>
             </div>
             <h1 class="text-6xl font-bold tracking-tight mb-6">MsiForge</h1>
             <p class="text-xl text-slate-300 mb-8 max-w-2xl mx-auto">
-                Build MSI packages that upgrade cleanly in Intune—from <span class="font-semibold text-white">Windows, macOS, or Linux</span>. 
+                Build MSI packages that upgrade cleanly in Intune—on <span class="font-semibold text-white">Windows x64 and ARM64</span>. 
                 <span class="text-slate-400">No WiX, no native dependencies, nothing to install.</span>
             </p>
             <div class="flex items-center justify-center gap-4 mb-8">
@@ -103,7 +103,7 @@
                         WiX delegates database creation and cabinet compression to <code class="bg-slate-800 px-2 py-1 rounded text-indigo-400 text-sm">wixnative.exe</code>, which is built for Windows only — so it cannot emit an MSI on macOS or Linux. That is still true in WiX v7. Its source stays under MS-RL, but from v6 onward using it carries a maintenance-fee obligation above $10,000 in annual revenue.
                     </p>
                     <p class="text-slate-400 text-sm mt-4 leading-relaxed">
-                        MsiForge is pure managed C#, MIT licensed, no native dependencies and nothing owed: the same binary on Windows, macOS and Linux.
+                        MsiForge is pure managed C#, MIT licensed, no native dependencies and nothing owed.
                     </p>
                 </div>
             </div>
@@ -117,8 +117,8 @@
                     <p class="text-slate-400 text-sm">No WiX required. The entire MSI engine is written in pure managed C#—no native dependencies, no licensing fees.</p>
                 </div>
                 <div class="bg-slate-900 p-6 rounded-2xl border border-slate-800">
-                    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Cross-Platform</h3>
-                    <p class="text-slate-400 text-sm">Build and sign MSIs on Windows, macOS, and Linux. The same binary works everywhere.</p>
+                    <h3 class="text-xl font-semibold text-indigo-400 mb-3">Portable Engine</h3>
+                    <p class="text-slate-400 text-sm">Shipped for Windows x64 and ARM64. The engine has no native dependency, so it builds and tests on macOS and Linux in CI too.</p>
                 </div>
                 <div class="bg-slate-900 p-6 rounded-2xl border border-slate-800">
                     <h3 class="text-xl font-semibold text-indigo-400 mb-3">Intune-Ready</h3>
@@ -136,50 +136,34 @@
             <div class="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
                 <div class="p-6 border-b border-slate-800">
                     <h2 class="text-2xl font-bold text-indigo-400 mb-4">What Works Where</h2>
-                    <p class="text-slate-400 mb-6">Build and inspect on any platform. Install and test only on Windows.</p>
+                    <p class="text-slate-400 mb-6">Everything the tool does, it does on Windows. The engine underneath is portable, the shipped binary is not.</p>
                 </div>
                 <div class="p-6">
-                    <div class="grid md:grid-cols-2 gap-8">
-                        <div>
-                            <h3 class="text-lg font-semibold text-white mb-3">Windows, macOS, Linux</h3>
-                            <ul class="space-y-2 text-slate-400">
-                                <li class="flex items-center"><span class="mr-2 text-green-500">✓</span> Build an MSI</li>
-                                <li class="flex items-center"><span class="mr-2 text-green-500">✓</span> Inspect packages</li>
-                                <li class="flex items-center"><span class="mr-2 text-green-500">✓</span> Round-trip</li>
-                                <li class="flex items-center"><span class="mr-2 text-green-500">✓</span> Upgrade checks</li>
-                                <li class="flex items-center"><span class="mr-2 text-green-500">✓</span> .intunewin packaging</li>
-                                <li class="flex items-center"><span class="mr-2 text-green-500">✓</span> PFX signing</li>
-                            </ul>
-                        </div>
-                        <div>
-                            <h3 class="text-lg font-semibold text-white mb-3">Windows only</h3>
-                            <ul class="space-y-2 text-slate-400">
-                                <li class="flex items-center"><span class="mr-2 text-green-500">✓</span> Install and test (msiexec)</li>
-                                <li class="flex items-center"><span class="mr-2 text-green-500">✓</span> Certificate store signing</li>
-                                <li class="flex items-center"><span class="mr-2 text-green-500">✓</span> Azure Trusted Signing</li>
-                            </ul>
-                        </div>
+                    <div>
+                        <h3 class="text-lg font-semibold text-white mb-3">On Windows</h3>
+                        <ul class="grid md:grid-cols-2 gap-x-8 gap-y-2 text-slate-400">
+                            <li class="flex items-center"><span class="mr-2 text-green-500">✓</span> Build an MSI</li>
+                            <li class="flex items-center"><span class="mr-2 text-green-500">✓</span> Install and test it</li>
+                            <li class="flex items-center"><span class="mr-2 text-green-500">✓</span> Inspect, round-trip</li>
+                            <li class="flex items-center"><span class="mr-2 text-green-500">✓</span> Upgrade checks</li>
+                            <li class="flex items-center"><span class="mr-2 text-green-500">✓</span> .intunewin packaging</li>
+                            <li class="flex items-center"><span class="mr-2 text-green-500">✓</span> PFX signing</li>
+                            <li class="flex items-center"><span class="mr-2 text-green-500">✓</span> Certificate store signing</li>
+                            <li class="flex items-center"><span class="mr-2 text-green-500">✓</span> Azure Artifact Signing</li>
+                        </ul>
                     </div>
                 </div>
             </div>
             <div class="mt-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl">
-                <h3 class="text-lg font-semibold text-blue-400 mb-2">Running on macOS or Linux?</h3>
-                <p class="text-slate-300 text-sm mb-3">The macOS binary needs to be unquarantined on first run:</p>
+                <h3 class="text-lg font-semibold text-blue-400 mb-2">Why Windows only?</h3>
+                <p class="text-slate-300 text-sm mb-3">Building an MSI is portable work. Finishing it is not: testing what you built needs <code class="bg-slate-800 px-2 py-1 rounded text-indigo-400 text-sm">msiexec</code>, and the packages are for Intune. A binary for another platform would let you build a package you had no way to check.</p>
+                <p class="text-slate-300 text-sm mb-3">The engine is pure managed C# with no native dependency, so it still builds and its 171 tests run on macOS and Linux &mdash; CI proves that on every push. To use it there, build from source:</p>
                 <div class="code-block bg-slate-950 rounded-xl p-4 font-mono text-sm overflow-x-auto">
                     <div class="flex">
                         <span class="w-8 text-slate-600 select-none">1</span>
-                        <span class="text-slate-300">xattr -d com.apple.quarantine ./MsiForge-macos-arm64</span>
-                    </div>
-                    <div class="flex">
-                        <span class="w-8 text-slate-600 select-none">2</span>
-                        <span class="text-slate-300">chmod +x ./MsiForge-macos-arm64</span>
-                    </div>
-                </div>
-                <p class="text-slate-300 text-sm mt-3">On Linux, just run:</p>
-                <div class="code-block bg-slate-950 rounded-xl p-4 font-mono text-sm overflow-x-auto">
-                    <div class="flex">
-                        <span class="w-8 text-slate-600 select-none">1</span>
-                        <span class="text-slate-300">chmod +x ./MsiForge-linux-x64</span>
+                        <span class="text-indigo-400">dotnet build</span>
+                        <span class="text-slate-300">MsiForge.slnx</span>
+                        <span class="text-slate-500">-c Release</span>
                     </div>
                 </div>
             </div>
@@ -218,9 +202,7 @@
                     <div class="flex flex-wrap gap-2">
                         <span class="px-3 py-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded text-sm">Windows x64</span>
                         <span class="px-3 py-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded text-sm">Windows ARM64</span>
-                        <span class="px-3 py-1 bg-slate-500/20 text-slate-400 border border-slate-500/30 rounded text-sm">macOS x64</span>
-                        <span class="px-3 py-1 bg-slate-500/20 text-slate-400 border border-slate-500/30 rounded text-sm">macOS ARM64</span>
-                        <span class="px-3 py-1 bg-green-500/20 text-green-400 border border-green-500/30 rounded text-sm">Linux x64</span>
+                        <span class="px-3 py-1 bg-slate-500/20 text-slate-400 border border-slate-500/30 rounded text-sm">Signed &amp; timestamped</span>
                     </div>
                 </div>
             </div>
