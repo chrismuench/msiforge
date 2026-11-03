@@ -1,6 +1,6 @@
 # MsiForge
 
-Build MSI packages that upgrade cleanly in Intune — from Windows **or macOS**.
+Build MSI packages that upgrade cleanly in Intune — on Windows, x64 and ARM64.
 
 A native desktop app and a CLI, on top of an MSI engine written from scratch in
 pure managed C#. No WiX, no native dependencies, nothing to install before it
@@ -51,11 +51,14 @@ MsiForge selftest             # build and verify a package end to end
 MsiForge build myapp.msiforge
 ```
 
-On macOS the binary is not notarised, so clear the quarantine flag once:
-`xattr -d com.apple.quarantine ./MsiForge-macos-arm64 && chmod +x ./MsiForge-macos-arm64`.
+Both binaries are Authenticode-signed with a timestamp.
 
-The Windows binaries are Authenticode-signed with a timestamp; the macOS and Linux
-ones are not signed at all, since there is nothing equivalent to sign them with.
+Windows is the only platform a binary is shipped for, and the reason is honest
+rather than technical: building a package is portable work, but *finishing* it is
+not. Testing what you built needs `msiexec`, and the packages are for Intune. The
+engine underneath is pure managed C# with no native dependency, so it still builds
+and tests on macOS and Linux — CI proves that on every push — and you can run it
+from source there if you have a reason to.
 
 From source:
 
@@ -201,6 +204,7 @@ package.
 
 | | Windows | macOS / Linux |
 |---|---|---|
+| Download a binary | yes (x64, ARM64) | no — run it from source |
 | Build an MSI | yes | yes |
 | Inspect, round-trip, upgrade check | yes | yes |
 | `.intunewin` packaging | yes | yes |

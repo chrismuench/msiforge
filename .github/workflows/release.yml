@@ -21,9 +21,12 @@ jobs:
         include:
           - { os: windows-latest, rid: win-x64,   asset: MsiForge-windows-x64.exe }
           - { os: windows-latest, rid: win-arm64, asset: MsiForge-windows-arm64.exe }
-          - { os: macos-latest,   rid: osx-arm64, asset: MsiForge-macos-arm64 }
-          - { os: macos-latest,   rid: osx-x64,   asset: MsiForge-macos-x64 }
-          - { os: ubuntu-latest,  rid: linux-x64, asset: MsiForge-linux-x64 }
+
+    # Windows only, because the tool cannot finish its own job anywhere else:
+    # building an MSI is portable, installing and testing one needs msiexec, and
+    # Intune is where the package is going. The engine stays pure managed C#, so
+    # it still builds and tests on macOS and Linux in ci.yml and from source -
+    # there is simply no binary shipped for them.
 
     runs-on: ${{ matrix.os }}
     # The Azure trust is scoped to this environment, so the federated credential
@@ -64,18 +67,13 @@ jobs:
         if: matrix.rid != 'win-arm64'
         shell: bash
         run: |
-          exe=out/MsiForge
-          [ -f "$exe.exe" ] && exe="$exe.exe"
-          chmod +x "$exe" 2>/dev/null || true
+          exe=out/MsiForge.exe
           "$exe" doctor
           "$exe" selftest
 
       - name: Name the asset
         shell: bash
-        run: |
-          src=out/MsiForge
-          [ -f "$src.exe" ] && src="$src.exe"
-          mv "$src" "${{ matrix.asset }}"
+        run: mv out/MsiForge.exe "${{ matrix.asset }}"
 
       # ------------------------------------------------------------------ signing
       # Authenticode is a PE thing, so only the two Windows binaries are signed.
@@ -166,13 +164,20 @@ jobs:
           files: assets/*
           generate_release_notes: true
           body: |
-            One file per platform. Download it and run it - there is no installer
-            and no .NET runtime to install first.
+            One executable per Windows architecture. Download it and run it - there
+            is no installer and no .NET runtime to install first.
 
-            The two Windows binaries are Authenticode-signed with Azure Artifact
-            Signing (SHA-256 file digest, RFC 3161 timestamp). The macOS and Linux
-            binaries are **not** signed: Authenticode has no equivalent there, and
-            macOS code signing plus notarisation is a separate task.
+            Both files are Authenticode-signed with Azure Artifact Signing (SHA-256
+            file digest, RFC 3161 timestamp).
+
+            **Windows is the only shipped platform.** Building a package is portable
+            work - the engine is pure managed C# with no native dependency, so it
+            compiles and its 171 tests pass on macOS and Linux too, and CI proves
+            that on every push. What is not portable is finishing the job: testing
+            what you built needs `msiexec`, and the packages are for Intune. So the
+            released binaries are Windows, and anything else runs from source:
+
+                dotnet build MsiForge.slnx -c Release
 
             The same binary is both the desktop app and the command line: run it
             with no arguments for the window, or with a command for the CLI.
@@ -180,10 +185,5 @@ jobs:
                 MsiForge-windows-x64.exe build myapp.msiforge
                 MsiForge-windows-x64.exe doctor
 
-            **macOS**: the binary is not notarised, so Gatekeeper will refuse it
-            on first run. Clear the quarantine flag once:
-
-                xattr -d com.apple.quarantine ./MsiForge-macos-arm64
-                chmod +x ./MsiForge-macos-arm64
-
-            **Linux**: `chmod +x` before running.
+            ARM64 is for Snapdragon X devices and ARM VMs; x64 is the one to pick
+            unless you know otherwise.

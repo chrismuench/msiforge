@@ -1,6 +1,6 @@
 # MsiForge — design
 
-A native desktop app (Windows + macOS) for building MSI packages, aimed at
+A native desktop app (Windows) for building MSI packages, aimed at
 IT admins deploying through Intune. The design priority is **upgrade
 correctness**: packages produced here must upgrade cleanly in Intune, every time.
 
@@ -363,7 +363,7 @@ built-in id replaces it, so a wrong switch can be corrected the same day.
 | Code signing (Azure Trusted Signing) | Implemented; **not** verified against a real account |
 | `.intunewin` packaging | Working; HMAC verified |
 | Recipe library | 9 recipes, 2 verified |
-| Avalonia GUI | Builds and runs on Windows; cross-compiles for macOS |
+| Avalonia GUI | Builds and runs on Windows; also builds on macOS and Linux from source |
 | Project bundles | Verified portable; same ProductCode from any directory |
-| Regression tests | 114 passing |
-| macOS verification | Cross-compiles; not yet run on a Mac |
+| Regression tests | 171 passing |
+| macOS and Linux | Engine builds, tests and runs from source; **no binary shipped** |
